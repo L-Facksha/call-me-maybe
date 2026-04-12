@@ -1,0 +1,5 @@
+[
+    {"name": "fn_add_numbers", "parameters": {"a": {"type": "number"}, "b": {"type": "number"}}},
+    {"name": "fn_greet", "parameters": {"name": {"type": "string"}}},
+    {"name": "fn_reverse_string", "parameters": {"s": {"type": "string"}}}
+]
