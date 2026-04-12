@@ -1,0 +1,5 @@
+[
+    {"name": "fn_greet", "parameters": {"name": "Alice"}},
+    {"name": "fn_add_numbers", "parameters": {"a": 3, "b": 4}},
+    {"name": "fn_reverse_string", "parameters": {"s": "python"}}
+]

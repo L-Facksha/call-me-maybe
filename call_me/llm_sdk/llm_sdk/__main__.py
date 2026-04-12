@@ -1,5 +1,4 @@
 import json
-import __init__ as q
 # ---------------ex1----------------------#
 
 
@@ -29,6 +28,7 @@ print(result)
 
 x = json
 # ----------------ex3----------------------#"
+
 
 def fn_add_numbers(a, b):
     return a + b
@@ -85,3 +85,41 @@ def dispatch(json_text: str) -> str:
 print("#----------------ex4----------------------#")
 print(dispatch('{"name": "fn_greet", "parameters": {"name": "Bob"}}'))
 print(dispatch('{"name": "fn_add_numbers", "parameters": {"a": 7, "b": 3}}'))
+
+
+# ----------------ex5----------------------#
+try:
+    bad_json = '{"name": "fn_greet", "parameters": {"name": "Bob"'
+    unknown_fn = '{"name": "fn_fly_to_moon", "parameters": {}}'
+    good = '{"name": "fn_greet", "parameters": {"name": "Carol"}}'
+
+    print(dispatch(bad_json))
+    print(dispatch(unknown_fn))
+    print(dispatch(good))
+except json.decoder.JSONDecodeError as error:
+    print("#----------------ex5----------------------#")
+    print(error)
+
+# ----------------ex6----------------------#
+
+
+text = [
+    '{"name": "fn_greet", "parameters": {"name": "Alice"}}',
+    '{"name": "fn_add_numbers", "parameters": {"a": 10, "b": 20}}',
+    '{"name": "fn_reverse_string", "parameters": {"s": "world"}}',
+    '{"name": "fn_greet", "parameters": {"name": "Bob"}}'
+]
+
+print("#----------------ex6----------------------#")
+
+try:
+    for x in text:
+        print(dispatch(x))
+except json.decoder.JSONDecodeError as error:
+    print(error)
+
+
+# ----------------ex7----------------------#
+
+print("#----------------ex7----------------------#")
+
