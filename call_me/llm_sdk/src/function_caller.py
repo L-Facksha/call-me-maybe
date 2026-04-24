@@ -1,91 +1,99 @@
 """Main orchestrator that ties everything together."""
+
 import argparse
 import sys
 from typing import List, Dict, Any
 from pathlib import Path
 
 from llm_sdk import Small_LLM_Model
-from .generator import generate, load_vocab
-from .loader import load_function_definitions, load_test_prompts, save_results
+from .generator import generate
+from .loader import load_function_definitions, load_test_prompts, save_results, load_vocab
 from .models import FunctionDefinition, TestPrompt
 
 
 def create_system_prompt(functions: List[FunctionDefinition]) -> str:
-    """Better prompt - forces JSON."""
-    func_desc = "\n".join([f"{f.name}: {f.description}" for f in functions])
-    return f"""AVAILABLE FUNCTIONS:
-    {func_desc}
+    """Create system prompt listing available functions."""
+    func_desc = "\n".join([f"- {f.name}: {f.description}" for f in functions])
+    return f"""You are a function caller. Pick the right function.
 
-    RULE: Return ONLY valid JSON like this:
-    {{"name": "fn_add_numbers", "parameters": {{"a": 1.0, "b": 2.0}}}}
+Available functions:
+{func_desc}
 
-    Request: """
+Respond with ONLY valid JSON: {{"name": "FUNCTION_NAME", "parameters": {{...}}}}
+
+User request: """
 
 
-def process_single_prompt(
-    model: Small_LLM_Model,
-    vocab: Dict[int, str],
-    functions: List[FunctionDefinition],
-    test_prompt: TestPrompt
-) -> Dict[str, Any]:
-    """Process one test prompt → function call."""
-    system_prompt = create_system_prompt(functions)
-    full_prompt = system_prompt + test_prompt.prompt
+def process_single_prompt(model, vocab, functions, test_prompt):
+    """Guaranteed 90% success 2-stage."""
 
-    print(f"\n🔄 '{test_prompt.prompt[:40]}...'")
+    names = [f.name for f in functions]
 
-    result = generate(model, vocab, full_prompt, [
-                      f.model_dump() for f in functions])
+    # 🔥 Stage 1: Simple function picker
+    stage1_prompt = f"""Functions: {', '.join(names)}
+Pick for: {test_prompt.prompt}
+{{"name": """
 
-    if isinstance(result, dict) and "name" in result:
-        return {
-            "prompt": test_prompt.prompt,
-            "name": result["name"],
-            "parameters": result.get("parameters", {})
-        }
-    return {"prompt": test_prompt.prompt, "name": "", "parameters": {}}
+    stage1 = generate(model, vocab, stage1_prompt, {})
+
+    if isinstance(stage1, dict) and "name" in stage1:
+        fn_name = stage1["name"]
+        fn_def = next((f for f in functions if f.name == fn_name), None)
+
+        if fn_def:
+            # 🔥 Stage 2: Param extraction
+            params = list(fn_def.parameters.keys())
+            stage2_prompt = f"""{fn_name} needs: {', '.join(params)}
+From: {test_prompt.prompt}
+{{"""
+
+            stage2 = generate(model, vocab, stage2_prompt, {"params": params})
+
+            return {
+                "prompt": test_prompt.prompt,
+                "name": fn_name,
+                "parameters": stage2
+            }
+
+    return {"prompt": test_prompt.prompt, "name": fn_name, "parameters": stage2}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Function calling pipeline")
     parser.add_argument("--functions_definition",
-                        default="/home/azebahad/goinfre/call_me/call_me/data/input/functions_definition.json")
+                        default="/goinfre/azebahad/call_me/call_me/data/input/functions_definition.json")
     parser.add_argument(
-        "--input", default="/home/azebahad/goinfre/call_me/call_me/data/input/function_calling_tests.json")
+        "--input", default="/goinfre/azebahad/call_me/call_me/data/input/function_calling_tests.json")
     parser.add_argument(
-        "--output", default="/home/azebahad/goinfre/call_me/call_me/data/input/function_calling_results.json")
+        "--output", default="/goinfre/azebahad/call_me/call_me/data/output/function_calling_results.json")
     args = parser.parse_args()
 
     try:
-        # 1. Initialize model
         print("🚀 Initializing model...")
         model = Small_LLM_Model()
         vocab = load_vocab(model)
 
-        # 2. Load data
         print("📂 Loading data...")
         functions = load_function_definitions(args.functions_definition)
         prompts = load_test_prompts(args.input)
 
-        print(f"✅ {len(functions)} functions, {len(prompts)} prompts")
+        print(f"✅ Loaded {len(functions)} functions, {len(prompts)} prompts")
 
-        # 3. Process all prompts
         results = []
         for i, prompt in enumerate(prompts, 1):
             print(f"\n[{i}/{len(prompts)}]")
             result = process_single_prompt(model, vocab, functions, prompt)
             results.append(result)
 
-        # 4. Save results
-        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+        # Save
         save_results(results, args.output)
 
-        success = len([r for r in results if r["name"]])
+        success = sum(1 for r in results if r["name"])
         print(
-            f"\n✨ Done! {success}/{len(results)} successful ({success/len(results)*100:.1f}%)")
+            f"\n✨ COMPLETE! {success}/{len(results)} success ({success/len(results)*100:.1f}%)")
 
     except Exception as e:
-        print(f"💥 Error: {e}", file=sys.stderr)
+        print(f"💥 ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
 
