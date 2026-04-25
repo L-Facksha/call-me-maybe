@@ -13,9 +13,6 @@ if TYPE_CHECKING:
     from src.models import FunctionDefinition
 
 
-# =========================
-# VOCAB LOADING (ROBUST)
-# =========================
 def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
     vocab_path = Path(model.get_path_to_vocab_file())
 
@@ -39,9 +36,6 @@ def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
     return vocab
 
 
-# =========================
-# HELPERS
-# =========================
 def is_valid_name_prefix(partial: str, valid_names: list[str]) -> bool:
     return any(name.startswith(partial) for name in valid_names)
 
@@ -58,9 +52,6 @@ def extract_logits(logits):
     return np.array(logits)
 
 
-# =========================
-# NAME GENERATION
-# =========================
 def generate_name(
     model: Small_LLM_Model,
     vocab: dict[int, str],
@@ -132,9 +123,6 @@ def generate_function_call(
     return result
 
 
-# =========================
-# NUMBER GENERATION
-# =========================
 def generate_number(
     model: Small_LLM_Model,
     vocab: dict[int, str],
@@ -205,9 +193,6 @@ def generate_number(
         return 0.0
 
 
-# =========================
-# STRING GENERATION
-# =========================
 def generate_string(
     model: Small_LLM_Model,
     vocab: dict[int, str],
@@ -270,9 +255,6 @@ def generate_string(
     return string_text.strip()
 
 
-# =========================
-# ARGUMENT GENERATION
-# =========================
 def generate_args(
     model: Small_LLM_Model,
     vocab: dict[int, str],
