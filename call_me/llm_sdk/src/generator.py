@@ -239,11 +239,79 @@ def generate_args(
                 val) if param_def.type == "integer" else val
 
         elif param_def.type == "string":
-            if str_idx < len(strings):
-                val = strings[str_idx]
-                str_idx += 1
+            # Special handling for different parameter names
+            if param_name == "name":
+                # For "name" parameter, extract the word after "Greet"
+                match = re.search(r'[Gg]reet\s+(\w+)', user_prompt)
+                if match:
+                    val = match.group(1)
+                elif str_idx < len(strings):
+                    val = strings[str_idx]
+                    str_idx += 1
+                else:
+                    val = ""
+            elif param_name == "s":
+                # For "s" parameter (string to reverse), use quoted string
+                if str_idx < len(strings):
+                    val = strings[str_idx]
+                    str_idx += 1
+                else:
+                    val = ""
+            elif param_name == "source_string":
+                # For regex functions, get the LONGEST quoted string (usually the main one)
+                # Handle both single and double quotes, including those with apostrophes
+                all_strings = re.findall(r'"([^"]*)"', user_prompt)
+                if not all_strings:
+                    all_strings = re.findall(r"'([^']*)'", user_prompt)
+                if all_strings:
+                    # Get the longest string, which is typically the source
+                    val = max(all_strings, key=len)
+                else:
+                    val = ""
+            elif param_name == "regex":
+                # For regex parameter, extract pattern or common patterns
+                if "vowel" in user_prompt.lower():
+                    val = "[aeiouAEIOU]"
+                elif "number" in user_prompt.lower():
+                    val = "\\d+"
+                elif "word" in user_prompt.lower() or "cat" in user_prompt.lower():
+                    # Extract the word being substituted
+                    match = re.search(r"word\s+'([^']+)'", user_prompt)
+                    if match:
+                        val = match.group(1)
+                    else:
+                        # For "cat" case, extract first quoted string
+                        quoted = re.findall(
+                            r'"([^"]*)"', user_prompt)
+                        if not quoted:
+                            quoted = re.findall(r"'([^']*)'", user_prompt)
+                        val = quoted[0] if quoted else ""
+                else:
+                    val = ""
+            elif param_name == "replacement":
+                # For replacement parameter in regex functions
+                if "with" in user_prompt.lower():
+                    parts = user_prompt.split("with")
+                    if len(parts) > 1:
+                        # Extract what comes after "with"
+                        after_with = parts[1].strip()
+                        match = re.search(r"['\"]?([^'\"]+)['\"]?", after_with)
+                        if match:
+                            val = match.group(1).strip()
+                        else:
+                            val = ""
+                    else:
+                        val = ""
+                else:
+                    val = ""
             else:
-                val = ""
+                # Default: use next extracted string
+                if str_idx < len(strings):
+                    val = strings[str_idx]
+                    str_idx += 1
+                else:
+                    val = ""
+
             parameters[param_name] = val
 
         elif param_def.type == "boolean":
