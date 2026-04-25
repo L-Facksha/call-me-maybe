@@ -1,101 +1,224 @@
-"""Main orchestrator that ties everything together."""
+"""Two-stage function calling pipeline."""
 
-import argparse
 import sys
-from typing import List, Dict, Any
-from pathlib import Path
-
+from typing import Any
+from src.models import FunctionDefinition, FunctionCallResult
+from src.generator import load_vocab, generate_name, generate_args
 from llm_sdk import Small_LLM_Model
-from .generator import generate
-from .loader import load_function_definitions, load_test_prompts, save_results, load_vocab
-from .models import FunctionDefinition, TestPrompt
 
 
-def create_system_prompt(functions: List[FunctionDefinition]) -> str:
-    """Create system prompt listing available functions."""
-    func_desc = "\n".join([f"- {f.name}: {f.description}" for f in functions])
-    return f"""You are a function caller. Pick the right function.
+def build_name_prompt(
+    user_prompt: str,
+    functions: list[FunctionDefinition],
+) -> str:
+    """Build prompt for function name selection.
 
-Available functions:
-{func_desc}
+    Parameters
+    ----------
+    user_prompt : str
+        The natural language request.
+    functions : list[FunctionDefinition]
+        Available function definitions.
 
-Respond with ONLY valid JSON: {{"name": "FUNCTION_NAME", "parameters": {{...}}}}
+    Returns
+    -------
+    str
+        Full prompt string ending with opening quote.
+    """
+    fn_list = "\n".join(
+        f"- {fn.name}: {fn.description}" for fn in functions
+    )
+    return (
+        f"You are a function selector.\n"
+        f"Available functions:\n{fn_list}\n\n"
+        f"User request: \"{user_prompt}\"\n"
+        f"Reply with the function name. JSON: {{\"name\": \""
+    )
 
-User request: """
+
+def build_args_prompt(
+    user_prompt: str,
+    fn: FunctionDefinition,
+) -> str:
+    """Build prompt for argument extraction.
+
+    Parameters
+    ----------
+    user_prompt : str
+        The natural language request.
+    fn : FunctionDefinition
+        The selected function definition.
+
+    Returns
+    -------
+    str
+        Full prompt string ending with opening brace.
+    """
+    params = ", ".join(
+        f"{name}: {pdef.type}" for name, pdef in fn.parameters.items()
+    )
+    return (
+        f"Extract arguments for {fn.name}({params}).\n"
+        f"Description: {fn.description}\n"
+        f"User request: \"{user_prompt}\"\n"
+        f"Reply with only JSON arguments. JSON: {{"
+    )
 
 
-def process_single_prompt(model, vocab, functions, test_prompt):
-    """Guaranteed 90% success 2-stage."""
+def coerce_args(
+    raw: dict[str, Any],
+    fn: FunctionDefinition,
+) -> dict[str, Any]:
+    """Coerce extracted arguments to their declared types.
 
-    names = [f.name for f in functions]
+    Parameters
+    ----------
+    raw : dict[str, Any]
+        Raw parsed argument dict.
+    fn : FunctionDefinition
+        Function definition with declared parameter types.
 
-    # 🔥 Stage 1: Simple function picker
-    stage1_prompt = f"""Functions: {', '.join(names)}
-Pick for: {test_prompt.prompt}
-{{"name": """
+    Returns
+    -------
+    dict[str, Any]
+        Coerced argument dict.
+    """
+    result: dict[str, Any] = {}
+    for name, pdef in fn.parameters.items():
+        val = raw.get(name)
+        if val is None:
+            result[name] = val
+            continue
+        try:
+            if pdef.type == "number":
+                result[name] = float(val)
+            elif pdef.type == "integer":
+                result[name] = int(val)
+            elif pdef.type == "string":
+                result[name] = str(val)
+            elif pdef.type == "boolean":
+                if isinstance(val, bool):
+                    result[name] = val
+                else:
+                    result[name] = str(val).lower() in ("true", "1", "yes")
+            else:
+                result[name] = val
+        except (ValueError, TypeError) as e:
+            print(f"[WARNING] Could not coerce {name}={val!r}: {e}",
+                  file=sys.stderr)
+            result[name] = val
+    return result
 
-    stage1 = generate(model, vocab, stage1_prompt, {})
 
-    if isinstance(stage1, dict) and "name" in stage1:
-        fn_name = stage1["name"]
-        fn_def = next((f for f in functions if f.name == fn_name), None)
+def process_prompt(
+    model: Small_LLM_Model,
+    vocab: dict[int, str],
+    user_prompt: str,
+    functions: list[FunctionDefinition],
+) -> FunctionCallResult | None:
+    """Run the two-stage pipeline for a single prompt.
 
-        if fn_def:
-            # 🔥 Stage 2: Param extraction
-            params = list(fn_def.parameters.keys())
-            stage2_prompt = f"""{fn_name} needs: {', '.join(params)}
-From: {test_prompt.prompt}
-{{"""
+    Parameters
+    ----------
+    model : Small_LLM_Model
+        The loaded LLM model instance.
+    vocab : dict[int, str]
+        Mapping from token ID to token string.
+    user_prompt : str
+        The natural language request.
+    functions : list[FunctionDefinition]
+        Available function definitions.
 
-            stage2 = generate(model, vocab, stage2_prompt, {"params": params})
+    Returns
+    -------
+    FunctionCallResult or None
+        The result or None if pipeline fails.
+    """
+    valid_names = [fn.name for fn in functions]
 
-            return {
+    print(f"[INFO] Selecting function for: {user_prompt!r}", file=sys.stderr)
+    name_prompt = build_name_prompt(user_prompt, functions)
+    fn_name = generate_name(model, vocab, name_prompt, valid_names)
+
+    if not fn_name:
+        print(f"[ERROR] Failed to select function for: {user_prompt!r}",
+              file=sys.stderr)
+        return None
+
+    print(f"[INFO] Selected: {fn_name}", file=sys.stderr)
+
+    fn_def = next((fn for fn in functions if fn.name == fn_name), None)
+    if fn_def is None:
+        print(f"[ERROR] Function {fn_name!r} not found.", file=sys.stderr)
+        return None
+
+    if not fn_def.parameters:
+        return FunctionCallResult(
+            prompt=user_prompt,
+            name=fn_name,
+            parameters={},
+        )
+
+    print(f"[INFO] Extracting arguments for {fn_name}...", file=sys.stderr)
+
+    raw_args = generate_args(model, vocab, user_prompt, fn_def)
+
+    if not raw_args:
+        print(f"[ERROR] Failed to extract arguments for: {user_prompt!r}",
+              file=sys.stderr)
+        return None
+
+    return FunctionCallResult(
+        prompt=user_prompt,
+        name=fn_name,
+        parameters=raw_args,
+    )
+
+
+def run_pipeline(
+    model: Small_LLM_Model,
+    functions: list[FunctionDefinition],
+    prompts: list[Any],
+) -> list[dict[str, Any]]:
+    """Run the full pipeline over all prompts.
+
+    Parameters
+    ----------
+    model : Small_LLM_Model
+        The loaded LLM model instance.
+    functions : list[FunctionDefinition]
+        Available function definitions.
+    prompts : list
+        List of TestPrompt objects.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        List of result dicts for JSON serialization.
+    """
+    vocab = load_vocab(model)
+    results: list[dict[str, Any]] = []
+
+    for i, test_prompt in enumerate(prompts):
+        print(f"\n[INFO] Prompt {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
+              file=sys.stderr)
+        try:
+            result = process_prompt(
+                model, vocab, test_prompt.prompt, functions)
+            if result is not None:
+                results.append(result.model_dump())
+            else:
+                results.append({
+                    "prompt": test_prompt.prompt,
+                    "name": "unknown",
+                    "parameters": {},
+                })
+        except Exception as e:
+            print(f"[ERROR] Prompt {i + 1} failed: {e}", file=sys.stderr)
+            results.append({
                 "prompt": test_prompt.prompt,
-                "name": fn_name,
-                "parameters": stage2
-            }
+                "name": "unknown",
+                "parameters": {},
+            })
 
-    return {"prompt": test_prompt.prompt, "name": fn_name, "parameters": stage2}
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Function calling pipeline")
-    parser.add_argument("--functions_definition",
-                        default="/goinfre/azebahad/call_me/call_me/data/input/functions_definition.json")
-    parser.add_argument(
-        "--input", default="/goinfre/azebahad/call_me/call_me/data/input/function_calling_tests.json")
-    parser.add_argument(
-        "--output", default="/goinfre/azebahad/call_me/call_me/data/output/function_calling_results.json")
-    args = parser.parse_args()
-
-    try:
-        print("🚀 Initializing model...")
-        model = Small_LLM_Model()
-        vocab = load_vocab(model)
-
-        print("📂 Loading data...")
-        functions = load_function_definitions(args.functions_definition)
-        prompts = load_test_prompts(args.input)
-
-        print(f"✅ Loaded {len(functions)} functions, {len(prompts)} prompts")
-
-        results = []
-        for i, prompt in enumerate(prompts, 1):
-            print(f"\n[{i}/{len(prompts)}]")
-            result = process_single_prompt(model, vocab, functions, prompt)
-            results.append(result)
-
-        # Save
-        save_results(results, args.output)
-
-        success = sum(1 for r in results if r["name"])
-        print(
-            f"\n✨ COMPLETE! {success}/{len(results)} success ({success/len(results)*100:.1f}%)")
-
-    except Exception as e:
-        print(f"💥 ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    return results
