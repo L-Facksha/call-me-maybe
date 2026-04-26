@@ -88,24 +88,3 @@ def save_results(results: list[dict], path: str) -> bool:
     with Path(path).open("w", encoding="utf-8") as f:
         json.dump(results, f)
     return True
-
-
-def load_vocab(model) -> dict[int, str]:
-    """Load tokenizer vocabulary from model path."""
-
-    vocab_path = Path(model.get_path_to_vocab_file())
-
-    if not vocab_path.exists():
-        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-
-    with vocab_path.open("r", encoding="utf-8") as f:
-        try:
-            vocab = json.load(f)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid vocab JSON: {e}")
-
-    # format: token -> id OR id -> token (depends on file)
-    if all(isinstance(k, str) and k.isdigit() for k in vocab.keys()):
-        return {int(k): v for k, v in vocab.items()}
-    else:
-        return {int(v): k for k, v in vocab.items()}
