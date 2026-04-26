@@ -60,7 +60,6 @@ def generate_name(
     for _ in range(max_tokens):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
 
-        # 🔒 Constrain tokens to valid prefixes
         for token_id in range(len(logits)):
             if token_id not in vocab:
                 logits[token_id] = -np.inf
