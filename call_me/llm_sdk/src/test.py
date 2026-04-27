@@ -80,3 +80,48 @@ def generate_name(module: Small_LLM_Model, prompt: str, vocab: dict[int, str], v
         current_name += token.replace("Ġ", "")
 
     return current_name if current_name in valid_names else ""
+
+
+def gnerate_number(model: Small_LLM_Model, prompt: str, vocab: dict[int, str], max_token: int = 15):
+    number_text = ""
+    ids = model.encode(prompt)[0].tolist()
+    dot_used = False
+
+    for _ in range(max_token):
+        logits = extract_logits(model.get_logits_from_input_ids(ids))
+
+        for token_id in range(len(logits)):
+            if token_id not in vocab:
+                logits[token_id] = -np.inf
+                continue
+
+            token_str = vocab[token_id]
+            stripped_token = token_str.strip()
+
+            is_valid = all(c.isdigit() for c in stripped_token) or (
+                stripped_token == '.' and not dot_used)
+
+            if not is_valid:
+                logits[token_id] = -np.inf
+
+        if np.all(np.isneginf(logits)):
+            break
+
+        next_id = int(np.argmax(logits))
+        if next_id not in vocab:
+            break
+
+        token = vocab[next_id].strip()
+        if not token:
+            break
+
+        if token == '.':
+            dot_used = True
+
+        number_text += token
+        ids.append(next_id)
+
+    try:
+        return float(number_text) if number_text else 0.0
+    except Exception:
+        return 0.0
