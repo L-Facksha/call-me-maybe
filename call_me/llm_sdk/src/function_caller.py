@@ -30,7 +30,7 @@ def process_prompt(
 
         fn_name = generate_name(model, vocab, name_prompt, valid_names)
 
-        if not fn_name:
+        if not fn_name or fn_name not in valid_names:
             print(f"[WARNING] Could not select function for: {user_prompt!r}",
                   file=sys.stderr)
             return None
