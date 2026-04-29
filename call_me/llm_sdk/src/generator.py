@@ -205,8 +205,8 @@ def generate_string(
         string_text += clean_token
 
         # Stop after reasonable length
-        if len(string_text) > 40:
-            return string_text.strip()
+        # if len(string_text) > 40:
+        #     return string_text.strip()
 
     return string_text.strip()
 

@@ -125,3 +125,65 @@ def gnerate_number(model: Small_LLM_Model, prompt: str, vocab: dict[int, str], m
         return float(number_text) if number_text else 0.0
     except Exception:
         return 0.0
+
+
+def generate_string(model: Small_LLM_Model, vocab: dict[int, str], prompt: str, max_token: int = 50) -> str:
+    string_text = ""
+    ids = model.encode(prompt)[0].tolist()
+
+    for _ in range(max_token):
+        logits = extract_logits(model.get_logits_from_input_ids(ids))
+
+        for token_id in logits:
+            if token_id not in vocab:
+                logits[token_id] = -np.inf
+                continue
+
+            token_str = vocab[token_id]
+
+            if any(c in token_str for c in ['{', '}', '[', ']', ':', '.', '\n', '\t']):
+                logits[token_id] = -np.inf
+            elif token_str.count(' ') > 1:
+                logits[token_id] = -np.inf
+
+        if np.all(np.isneginf(logits)):
+            break
+
+        next_id = np.argmax(logits)
+        if next_id not in vocab:
+            break
+
+        token = vocab[next_id]
+        clear_token = token.replace('Ġ', ' ')
+        ids.append(clear_token)
+
+        if '"' in token or "'" in token:
+            return string_text.strip()
+
+        if "  " in (string_text + clear_token):
+            return string_text.strip()
+
+        string_text += clear_token
+
+        return string_text.strip()
+
+
+def generate_args(model: Small_LLM_Model, vocab: dict[int, str], user_prompt: str, func: FunctionDefinition) -> dict[str: Any]:
+    parameters: dict[str, Any] = {}
+
+    numbers = re.findall(r"-?\d+\.\d*", user_prompt)
+    strings = re.findall(r"['\"]([^'\"]*)['\"]", user_prompt)
+
+    num_index = 0
+    str_index = 0
+
+    for param_name, param_def in func.parameters.items():
+        if param_name.type == "number":
+            if num_index < len(numbers):
+                value = float(numbers(num_index))
+                num_index += 1
+        else:
+            value = 0.0
+            
+        parameters[param_name] = value
+
