@@ -1,18 +1,18 @@
 [
     {
-        "prompt": "What is the multiplication of 2 and 3?",
+        "prompt": "What is the sum of -279874646431464 and 9879978878797987987?",
         "name": "fn_add_numbers",
         "parameters": {
-            "a": 2.0,
-            "b": 3.0
+            "a": -279874646431464.0,
+            "b": 9.879978878797988e+18
         }
     },
     {
-        "prompt": "What is the sum of 265 and 345?",
+        "prompt": "What is the sum of 265 and -345?",
         "name": "fn_add_numbers",
         "parameters": {
             "a": 265.0,
-            "b": 345.0
+            "b": -345.0
         }
     },
     {

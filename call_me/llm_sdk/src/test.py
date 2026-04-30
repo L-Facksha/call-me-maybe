@@ -178,12 +178,80 @@ def generate_args(model: Small_LLM_Model, vocab: dict[int, str], user_prompt: st
     str_index = 0
 
     for param_name, param_def in func.parameters.items():
-        if param_name.type == "number":
+        if param_def.type == "number":
             if num_index < len(numbers):
                 value = float(numbers(num_index))
                 num_index += 1
-        else:
-            value = 0.0
-            
-        parameters[param_name] = value
+            else:
+                value = 0.0
+            parameters[param_name] = value
 
+        elif param_def.type == "string":
+            if param_name == "name":
+                get_name = re.search(r"[Gg]reet\s+(\w+)", user_prompt)
+                if get_name:
+                    value = get_name.group(1)
+                elif str_index < len(get_name):
+                    value = strings[str_index]
+                    str_index += 1
+                else:
+                    value = ""
+            elif param_name == "s":
+                if str_index < len(strings):
+                    value = strings[str_index]
+                    str_index += 1
+                else:
+                    value = ""
+            elif param_name == "source_string":
+                all_strings = re.findall(r"'([^']*)'", user_prompt)
+                if not all_strings:
+                    all_strings = re.findall(r'"([^"]*)"', user_prompt)
+                if all_strings:
+                    value = max(all_strings, key=len)
+                else:
+                    value = ""
+            elif param_name == "regex":
+                if "vowel" in user_prompt.lower():
+                    value = "[aeiuoAEIUO]"
+                elif "number" in user_prompt.lower():
+                    value = "\\d+"
+                elif "word" in user_prompt.lower() or "cat" in user_prompt.lower():
+                    get_word = re.findall(r"word\s+'([^']+)'", user_prompt)
+                    if get_word:
+                        value = get_word.group(1)
+                    else:
+                        quoted = re.findall(r'"([^"]*)"', user_prompt)
+                        if not quoted:
+                            quoted = re.findall(r"'([^']*)'", user_prompt)
+                        value = quoted[0] if quoted else ""
+                else:
+                    value = ""
+            elif param_name == "replacement":
+                if "with" in user_prompt.lower():
+                    parts = user_prompt.split("with")
+                    if len(parts) > 1:
+                        after_with = parts[1].strip()
+                        get_word = re.search(
+                            r"['\"]?([^'\"]+)['\"]?", after_with)
+                        if get_word:
+                            value = get_word.group(1).strip()
+                        else:
+                            value = ""
+                    else:
+                        value = ""
+                else:
+                    value = ""
+            else:
+                if str_index < len(strings):
+                    value = str_index[str_index]
+                    str_index += 1
+                else:
+                    value = ""
+            parameters[param_name] = value
+
+        elif param_def.type == "boolean":
+            prompt = f"{user_prompt} Answer: "
+            value = generate_string(model, vocab, prompt, max_token=5)
+            parameters[param_name] = value.lower() in ["true", "yes"]
+
+    return parameters
