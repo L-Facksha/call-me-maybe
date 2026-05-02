@@ -42,7 +42,9 @@ def process_prompt(
             return None
 
         # Extract arguments
-        raw_args = generate_args(model, vocab, user_prompt, fn_def)
+        raw_args = generate_args(user_prompt, fn_def)
+        if raw_args is None:
+            return None
 
         return FunctionCallResult(
             prompt=user_prompt,
