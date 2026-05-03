@@ -4,7 +4,7 @@ import sys
 from typing import Any
 from src.models import FunctionDefinition, FunctionCallResult
 from src.generator import load_vocab, generate_name, generate_args
-from llm_sdk import Small_LLM_Model
+from llm_sdk.llm_sdk import Small_LLM_Model
 
 
 def process_prompt(

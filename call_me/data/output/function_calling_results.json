@@ -1,11 +1,8 @@
 [
     {
-        "prompt": "What is the sum of -279874646431464 and 9879978878797987987?",
-        "name": "fn_add_numbers",
-        "parameters": {
-            "a": -279874646431464,
-            "b": 9879978878797987987
-        }
+        "prompt": "What is the sum of  and ?",
+        "name": "",
+        "parameters": {}
     },
     {
         "prompt": "What is the sum of 265 and -345?",
@@ -16,10 +13,10 @@
         }
     },
     {
-        "prompt": "Greet shrek",
+        "prompt": "Greet ",
         "name": "fn_greet",
         "parameters": {
-            "name": "shrek"
+            "name": "Greet"
         }
     },
     {
@@ -58,10 +55,10 @@
         }
     },
     {
-        "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
+        "prompt": "Replace all numbers in Hello 34 I'm 233 years old\" with NUMBERS",
         "name": "fn_substitute_string_with_regex",
         "parameters": {
-            "source_string": "Hello 34 I'm 233 years old",
+            "source_string": "",
             "regex": "\\d+",
             "replacement": "NUMBERS"
         }

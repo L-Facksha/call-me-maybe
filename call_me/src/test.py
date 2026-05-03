@@ -3,7 +3,7 @@ import json
 import numpy as np
 import re
 from typing import Any, TYPE_CHECKING
-from llm_sdk import Small_LLM_Model
+from llm_sdk.llm_sdk import Small_LLM_Model
 
 if TYPE_CHECKING:
     from src.models import FunctionDefinition
