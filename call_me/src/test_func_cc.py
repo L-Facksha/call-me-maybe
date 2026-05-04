@@ -51,7 +51,7 @@ def run_pipeline(model: Small_LLM_Model, functions: list[FunctionDefinition], pr
         print(
             f"[INFO] {i+1}/{len(prompts)}: {test_prompt.prompt!r}", file=sys.stderr)
 
-        result = process_prompt(model, vocab, test_prompt, functions)
+        result = process_prompt(model, vocab, test_prompt.prompt, functions)
 
         if result:
             results.append(result.model_dump())
