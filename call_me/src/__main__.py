@@ -1,5 +1,6 @@
 import argparse
 import sys
+import time
 
 
 def parse_args() -> argparse.Namespace:
@@ -9,7 +10,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=str,
                         default="data/input/function_calling_tests.json")
     parser.add_argument("--output", type=str,
-                        default=" data/output/function_calls.json")
+                        default="data/output/function_calling_results.json")
 
     return parser.parse_args()
 
@@ -41,6 +42,9 @@ def main() -> int:
 
         save_results(results, args.output)
         print(f"[INFO] Results saved to {args.output}", file=sys.stderr)
+        end_time = time.perf_counter()
+        duration = end_time - start
+        print(f"[TIME: {duration}]")
         return 0
 
     except Exception as error:
@@ -49,4 +53,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    start = time.perf_counter()
     sys.exit(main())

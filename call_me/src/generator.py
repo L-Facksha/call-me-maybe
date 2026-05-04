@@ -40,7 +40,7 @@ def extract_logits(logits):
     return np.array(logits)
 
 
-def generate_name(model: Small_LLM_Model, vocab: dict[int, str], prompt: str, valid_names: list[str], max_token: int = 50):
+def generate_name(model: Small_LLM_Model, vocab: dict[int, str], prompt: str, valid_names: list[str], max_token: int = 10):
     current_name = ""
     ids = model.encode(prompt)[0].tolist()
 
