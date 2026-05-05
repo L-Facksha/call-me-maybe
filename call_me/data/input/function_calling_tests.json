@@ -1,35 +1,47 @@
 [
   {
-    "prompt": "What is the sum of 2 and 3?"
+    "prompt": "can you help me with something"
   },
   {
-    "prompt": "What is the sum of 265 and -345?"
+    "prompt": "I was thinking about numbers and stuff"
   },
   {
-    "prompt": "Greet "
+    "prompt": "hello there"
   },
   {
-    "prompt": "Greet john"
+    "prompt": "what do you think about cats?"
   },
   {
-    "prompt": "Reverse the string 'hello'"
+    "prompt": "tell me something interesting"
   },
   {
-    "prompt": "Reverse the string 'world'"
+    "prompt": "I have a question but I forgot it"
   },
   {
-    "prompt": "What is the square root of 16?"
+    "prompt": "do magic for me"
   },
   {
-    "prompt": "Calculate the square root of 144"
+    "prompt": "please compute everything I need"
   },
   {
-    "prompt": "Replace all numbers in Hello 34 I'm 233 years old\" with NUMBERS"
+    "prompt": "random test input 123 banana"
   },
   {
-    "prompt": "Replace all vowels in 'Programming is fun' with asterisks"
+    "prompt": "can you reverse my life decisions"
   },
   {
-    "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'"
+    "prompt": "add this and also greet my friend john and also reverse hello"
+  },
+  {
+    "prompt": "square root of greetings"
+  },
+  {
+    "prompt": "what is 2 plus hello"
+  },
+  {
+    "prompt": "replace happiness with sadness in my mood"
+  },
+  {
+    "prompt": "cat dog elephant tree sky"
   }
 ]

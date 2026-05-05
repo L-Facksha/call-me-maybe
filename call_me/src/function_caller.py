@@ -13,7 +13,9 @@ def process_prompt(model: Small_LLM_Model, vocab: dict[int, str], user_prompt: s
         )
 
         name_prompt = (
-            f"Available functions:\n{fn_descriptions}\n"
+            f"Available functions with strict usage rules:\n{fn_descriptions}\n"
+            f"IMPORTANT: Only choose a function if the user request clearly matches its purpose.\n"
+            f"If no function matches, output an empty string.\n"
             f"User request: {user_prompt}\n"
             f"Selected function: \""
         )

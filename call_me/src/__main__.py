@@ -48,6 +48,7 @@ def main() -> int:
         return 0
 
     except Exception as error:
+        print("hello")
         print(f"[ERROR] {error}", file=sys.stderr)
         return 1
 
