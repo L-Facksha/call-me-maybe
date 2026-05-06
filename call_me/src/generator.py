@@ -1,7 +1,9 @@
+"""Constrained decoding generator for function calling."""
+
 from pathlib import Path
 import json
-import numpy as np
 import re
+import numpy as np
 from typing import Any, TYPE_CHECKING
 from llm_sdk.llm_sdk import Small_LLM_Model
 
@@ -11,168 +13,152 @@ if TYPE_CHECKING:
 
 def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
     vocab_path = Path(model.get_path_to_vocab_file())
-    if not vocab_path.exists():
-        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-
     with vocab_path.open("r", encoding="utf-8") as f:
-        vocab_raw = json.load(f)
-
-    vocab = {}
-    for k, v in vocab_raw.items():
+        raw = json.load(f)
+    vocab: dict[int, str] = {}
+    for k, v in raw.items():
         try:
             vocab[int(k)] = str(v)
-        except Exception:
+        except:
             try:
                 vocab[int(v)] = str(k)
-            except Exception:
+            except:
                 continue
     return vocab
 
 
-def extract_logits(logits):
-    if hasattr(logits, "shape"):
-        if len(logits.shape) == 3:
-            return logits[0, -1].numpy()
-        elif len(logits.shape) == 2:
-            return logits[-1].numpy()
-        else:
-            return logits.numpy()
-    return np.array(logits)
+def extract_logits(logits: Any) -> np.ndarray:
+    """Safely convert logits to a numpy array and handle indexing."""
+    # Convert list to numpy array if it isn't one
+    if isinstance(logits, list):
+        logits = np.array(logits)
+
+    # Check if we have shape (batch, seq_len, vocab) or (seq_len, vocab)
+    if len(logits.shape) == 3:
+        return logits[0, -1]
+    if len(logits.shape) == 2:
+        return logits[-1]
+    return logits
 
 
-def generate_name(model: Small_LLM_Model, vocab: dict[int, str], prompt: str, valid_names: list[str], max_token: int = 10):
-    current_name = ""
+def _clean(token: str) -> str:
+    # Ġ is space, Ċ is newline
+    return token.replace("Ġ", " ").replace("▁", "").replace("Ċ", "\n")
+
+
+def generate_name(
+    model: Small_LLM_Model,
+    vocab: dict[int, str],
+    prompt: str,
+    valid_names: list[str],
+    max_token: int = 15,
+) -> str:
+    current = ""
     ids = model.encode(prompt)[0].tolist()
 
     for _ in range(max_token):
-        logits = extract_logits(model.get_logits_from_input_ids(ids))
+        raw_logits = model.get_logits_from_input_ids(ids)
+        logits = extract_logits(raw_logits)
+        mask = np.full_like(logits, -np.inf)
 
-        for token_id in range(len(logits)):
-            if token_id not in vocab:
-                logits[token_id] = -np.inf
+        for tid, token_raw in vocab.items():
+            if tid >= len(logits):
                 continue
+            clean = _clean(token_raw)
 
-            token_str = vocab[token_id]
-            clean_token = token_str.replace("Ġ", "").strip()
-
-            if token_str == '"':
-                if current_name not in valid_names:
-                    logits[token_id] = -np.inf
+            if '"' in clean:
+                if current.strip() in valid_names:
+                    mask[tid] = logits[tid]
             else:
-                mybe = current_name + clean_token
-                valid = any(name.startswith(mybe) for name in valid_names)
-                if not valid:
-                    logits[token_id] = -np.inf
+                potential = (current + clean).strip()
+                if any(name.startswith(potential) for name in valid_names) or potential == "":
+                    mask[tid] = logits[tid]
 
-        if np.all(np.isneginf(logits)):
+        if np.all(np.isneginf(mask)):
             break
-
-        next_id = int(np.argmax(logits))
-        if next_id not in vocab:
-            break
-
-        token = vocab[next_id]
+        next_id = int(np.argmax(mask))
         ids.append(next_id)
-
-        if token == '"':
-            return current_name if current_name in valid_names else ""
-
-        current_name += token.replace("Ġ", "")
-
-    return current_name if current_name in valid_names else ""
+        tok = _clean(vocab[next_id])
+        if '"' in tok:
+            break
+        current += tok
+    return current.strip()
 
 
-def generate_args(user_prompt: str, func: "FunctionDefinition") -> dict[str, Any]:
-    parameters: dict[str, Any] = {}
+def generate_string(model, vocab, prompt, max_token=150) -> str:
+    current = ""
+    ids = model.encode(prompt)[0].tolist()
+    stop_sequences = ["\n", "Answer:", "Request:", "Value:"]
 
-    numbers = re.findall(r"-?\d+(?:\.\d+)?", user_prompt)
-    strings = re.findall(r"['\"]([^'\"]*)['\"]", user_prompt)
+    for _ in range(max_token):
+        raw_logits = model.get_logits_from_input_ids(ids)
+        logits = extract_logits(raw_logits)
+        mask = np.full_like(logits, -np.inf)
 
-    num_index = 0
-    str_index = 0
+        for tid, token_raw in vocab.items():
+            if tid >= len(logits):
+                continue
+            clean = _clean(token_raw)
+            if any(stop in clean for stop in stop_sequences):
+                continue
+            mask[tid] = logits[tid]
 
-    for param_name, param_def in func.parameters.items():
-        if param_def.type == "number":
-            if not numbers:
-                return None
-            if num_index < len(numbers):
-                try:
-                    raw = numbers[num_index]
-                    if "." in raw:
-                        value = float(raw)
-                    else:
-                        value = int(raw)
-                except:
-                    value = 0.0
-                num_index += 1
-            else:
-                value = 0.0
-            parameters[param_name] = value
+        if np.all(np.isneginf(mask)):
+            break
+        next_id = int(np.argmax(mask))
+        ids.append(next_id)
+        tok = _clean(vocab[next_id])
 
-        elif param_def.type == "string":
-            if not strings:
-                words = user_prompt.split()
-                strings = [words[-1]] if words else []
-            if param_name == "name":
-                get_name = re.search(r"[Gg]reet\s+(\w+)", user_prompt)
-                if get_name:
-                    value = get_name.group(1)
-                elif str_index < len(strings):
-                    value = strings[str_index]
-                    str_index += 1
-                else:
-                    value = ""
-            elif param_name == "s":
-                if str_index < len(strings):
-                    value = strings[str_index]
-                    str_index += 1
-                else:
-                    value = ""
-            elif param_name == "source_string":
-                all_strings = re.findall(r"'([^']*)'", user_prompt)
-                if not all_strings:
-                    all_strings = re.findall(r'"([^"]*)"', user_prompt)
-                if all_strings:
-                    value = max(all_strings, key=len)
-                else:
-                    value = ""
-            elif param_name == "regex":
-                if "vowel" in user_prompt.lower():
-                    value = "[aeiouAEIOU]"
-                elif "number" in user_prompt.lower():
-                    value = "\\d+"
-                elif "word" in user_prompt.lower() or "cat" in user_prompt.lower():
-                    get_word = re.findall(r"word\s+'([^']+)'", user_prompt)
-                    if get_word:
-                        value = get_word[0]
-                    else:
-                        quoted = re.findall(r'"([^"]*)"', user_prompt)
-                        if not quoted:
-                            quoted = re.findall(r"'([^']*)'", user_prompt)
-                        value = quoted[0] if quoted else ""
-                else:
-                    value = ""
-            elif param_name == "replacement":
-                if "with" in user_prompt.lower():
-                    parts = user_prompt.split("with")
-                    if len(parts) > 1:
-                        after_with = parts[1].strip()
-                        get_word = re.search(
-                            r"['\"]?([^'\"]+)['\"]?", after_with)
-                        if get_word:
-                            value = get_word.group(1).strip()
-                        else:
-                            value = ""
-                    else:
-                        value = ""
-                else:
-                    value = ""
-            else:
-                if str_index < len(strings):
-                    value = strings[str_index]
-                    str_index += 1
-                else:
-                    value = ""
-            parameters[param_name] = value
+        if '"' in tok:
+            current += tok.split('"')[0]
+            break
+        current += tok
+    return current.strip()
 
+
+def generate_number(model, vocab, prompt, max_token=25) -> float:
+    current = ""
+    ids = model.encode(prompt)[0].tolist()
+    allowed = set("0123456789.+- eE")
+
+    for _ in range(max_token):
+        raw_logits = model.get_logits_from_input_ids(ids)
+        logits = extract_logits(raw_logits)
+        mask = np.full_like(logits, -np.inf)
+
+        for tid, token_raw in vocab.items():
+            if tid >= len(logits):
+                continue
+            clean = _clean(token_raw)
+            if clean and all(c in allowed for c in clean):
+                mask[tid] = logits[tid]
+
+        if np.all(np.isneginf(mask)):
+            break
+        next_id = int(np.argmax(mask))
+        ids.append(next_id)
+        tok = _clean(vocab[next_id])
+
+        if "\n" in tok or (current.strip() and tok.isspace()):
+            break
+        current += tok
+
+    try:
+        # Final regex to grab only the valid number part
+        nums = re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", current)
+        return float(nums[0]) if nums else 0.0
+    except:
+        return 0.0
+
+
+def generate_args(model, vocab, user_prompt, func) -> dict[str, Any]:
+    parameters = {}
+    for p_name, p_def in func.parameters.items():
+        if p_def.type == "number":
+            # Simplified prompt for zero-shot number extraction
+            prompt = f"User Request: {user_prompt}\nTarget: {func.name}\nValue of {p_name}: "
+            parameters[p_name] = generate_number(model, vocab, prompt)
+        else:
+            prompt = f"User Request: {user_prompt}\nTarget: {func.name}\nValue of {p_name}: \""
+            parameters[p_name] = generate_string(model, vocab, prompt)
     return parameters

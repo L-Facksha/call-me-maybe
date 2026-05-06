@@ -31,7 +31,7 @@ def process_prompt(model: Small_LLM_Model, vocab: dict[int, str], user_prompt: s
             print(f"[WARNING] Function not found: {fn_name}", file=sys.stderr)
             return None
 
-        raw_args = generate_args(user_prompt, fn_def)
+        raw_args = generate_args(model, vocab, user_prompt, fn_def)
         if raw_args is None:
             return None
 
