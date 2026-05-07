@@ -1,10 +1,10 @@
 [
     {
-        "prompt": "What is the sum of 2 and 3?",
+        "prompt": "What is the sum of 246465445649 and -45683?",
         "name": "fn_add_numbers",
         "parameters": {
-            "a": 2.0,
-            "b": 3.0
+            "a": 246465445649.0,
+            "b": -45683.0
         }
     },
     {
@@ -16,10 +16,10 @@
         }
     },
     {
-        "prompt": "Greet shrek",
+        "prompt": "tell me a joke",
         "name": "fn_greet",
         "parameters": {
-            "name": "shrek"
+            "name": "joke"
         }
     },
     {
@@ -62,8 +62,8 @@
         "name": "fn_substitute_string_with_regex",
         "parameters": {
             "source_string": "Hello 34 I'm 233 years old",
-            "regex": "\\d+  So, the user request is: Replace all numbers in",
-            "replacement": "NUMBERS  So, the user request is: Replace all numbers in"
+            "regex": "\\d+",
+            "replacement": "NUMBERS"
         }
     },
     {
@@ -71,8 +71,8 @@
         "name": "fn_substitute_string_with_regex",
         "parameters": {
             "source_string": "Programming is fun",
-            "regex": "/aeiou/  So, the user request is: Replace all vowels in 'Programming is fun21 with",
-            "replacement": "*  So, the user request is: Replace all vowels in 'Programming is fun21 with aster"
+            "regex": "/aeiou/ikgkkjghlj;hlhkl",
+            "replacement": "*"
         }
     },
     {

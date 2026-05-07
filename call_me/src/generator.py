@@ -41,7 +41,7 @@ def extract_logits(logits: Any) -> np.ndarray:
 
 
 def _clean(token: str) -> str:
-    return token.replace("Ġ", " ").replace("▁", " ").replace("Ċ", " ")
+    return token.replace("Ġ", " ").replace("▁", " ").replace("Ċ", "\n")
 
 
 def _extract_string_for_param(
@@ -51,35 +51,29 @@ def _extract_string_for_param(
 ) -> str | None:
     """Extract the correct string value for a parameter from the user prompt.
 
-    Handles two cases:
-    - "... X ... in 'SOURCE'" pattern: the string after "in" is the source
-      (first param), the others fill remaining params in order.
-    - Normal positional: first quote -> first param, second -> second, etc.
-    Returns None when the param cannot be extracted and the LLM should be used.
+    - "... X ... in 'SOURCE'" pattern: string after "in" is the source (first param).
+    - Normal positional: first quote → first param, second → second, etc.
+    - No quotes + single param: take the last word.
+    - Returns None when the param cannot be extracted (LLM fallback used).
     """
     quoted = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
     candidates = [a if a else b for a, b in quoted]
 
     if not candidates:
-        # No quotes: single-param function takes the last word.
         if total_string_params == 1 and param_index == 0:
             words = user_prompt.strip().split()
             return words[-1] if words else None
         return None
 
     if len(candidates) == total_string_params:
-        # Check for "... in 'SOURCE'" pattern.
-        in_match = re.search(
-            r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
+        in_match = re.search(r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
         if in_match and total_string_params >= 2:
             source_val = in_match.group(1)
             rest = [c for c in candidates if c != source_val]
             ordered = [source_val] + rest
             return ordered[param_index] if param_index < len(ordered) else None
-        # Normal positional assignment.
         return candidates[param_index] if param_index < len(candidates) else None
 
-    # Fewer candidates than params: assign what we have, leave rest to LLM.
     return candidates[param_index] if param_index < len(candidates) else None
 
 
@@ -138,40 +132,40 @@ def generate_number(
     if param_index < len(numbers):
         return numbers[param_index]
 
-    # ids = model.encode(prompt)[0].tolist()
-    # current = ""
+    ids = model.encode(prompt)[0].tolist()
+    current = ""
 
-    # for _ in range(max_token):
-    #     logits = extract_logits(model.get_logits_from_input_ids(ids))
+    for _ in range(max_token):
+        logits = extract_logits(model.get_logits_from_input_ids(ids))
 
-    #     for tid in range(len(logits)):
-    #         if tid not in vocab:
-    #             logits[tid] = -np.inf
-    #             continue
-    #         clean = _clean(vocab[tid]).strip()
-    #         if not clean:
-    #             logits[tid] = -np.inf
-    #             continue
-    #         if not current and clean[0] not in "0123456789-+.":
-    #             logits[tid] = -np.inf
-    #         elif current and not all(c in "0123456789.eE+-" for c in clean):
-    #             logits[tid] = -np.inf
+        for tid in range(len(logits)):
+            if tid not in vocab:
+                logits[tid] = -np.inf
+                continue
+            clean = _clean(vocab[tid]).strip()
+            if not clean:
+                logits[tid] = -np.inf
+                continue
+            if not current and clean[0] not in "0123456789-+.":
+                logits[tid] = -np.inf
+            elif current and not all(c in "0123456789.eE+-" for c in clean):
+                logits[tid] = -np.inf
 
-    #     if np.all(np.isneginf(logits)):
-    #         break
+        if np.all(np.isneginf(logits)):
+            break
 
-    #     next_id = int(np.argmax(logits))
-    #     if next_id not in vocab:
-    #         break
+        next_id = int(np.argmax(logits))
+        if next_id not in vocab:
+            break
 
-    #     clean = _clean(vocab[next_id]).strip()
-    #     ids.append(next_id)
-    #     current += clean
+        clean = _clean(vocab[next_id]).strip()
+        ids.append(next_id)
+        current += clean
 
-    # try:
-    #     return float(current) if current else 0.0
-    # except ValueError:
-    #     return 0.0
+    try:
+        return float(current) if current else 0.0
+    except ValueError:
+        return 0.0
 
 
 def generate_string(
@@ -184,8 +178,7 @@ def generate_string(
     max_token: int = 60,
 ) -> str:
     # Try direct extraction first.
-    direct = _extract_string_for_param(
-        user_prompt, param_index, total_string_params)
+    direct = _extract_string_for_param(user_prompt, param_index, total_string_params)
     if direct is not None:
         return direct
 
@@ -201,10 +194,16 @@ def generate_string(
                 logits[tid] = -np.inf
                 continue
             clean = _clean(vocab[tid])
+            # Block newlines — everything after a newline is hallucination.
             if "\n" in clean:
                 logits[tid] = -np.inf
                 continue
             if any(c in clean for c in ["{", "}", "[", "]"]):
+                logits[tid] = -np.inf
+                continue
+            # Block bare digit tokens when current already has non-digit content
+            # (stops "asterisk24", "regex16", etc.)
+            if current and clean.strip().isdigit() and not current.strip().lstrip("-").replace(".", "").isdigit():
                 logits[tid] = -np.inf
 
         if np.all(np.isneginf(logits)):
@@ -222,6 +221,21 @@ def generate_string(
             return current.strip()
 
         current += clean
+
+        # If current is a single special character, it's complete — stop now.
+        # Prevents "*asterisked", "?extra", etc.
+        if current.strip() in ("*", "+", "?", "!", "#", "@", "^", "~"):
+            return current.strip()
+
+        # Stop as soon as the model starts adding explanations.
+        # Hallucination always begins with " (" e.g. "\d+ (case-insensitive..."
+        if " (" in current:
+            current = current.split(" (")[0]
+            return current.strip()
+
+        if "  " in current:
+            current = current.split("  ")[0]
+            return current.strip()
 
         if len(current) > 80:
             return current.strip()
@@ -261,58 +275,25 @@ def generate_args(
         elif param_def.type == "string":
             prompt = (
                 "Extract the parameter value from the user request.\n"
-                "Return ONLY the value.\n"
-
-                "Example:\n"
-                "User request: What is the sum of 2 and 3?\n"
-                "Parameter: a\n"
-                "Value: 2\n"
-
-                "Example:\n"
-                "User request: What is the sum of 2 and 3?\n"
-                "Parameter: b\n"
-                "Value: 3\n"
-
-                "Example:\n"
+                "Return ONLY the value, nothing else.\n\n"
                 "User request: Greet john\n"
                 "Parameter: name\n"
-                "Value: john\n"
-
-                "Example:\n"
+                "Value: john\n\n"
                 "User request: Reverse the string 'hello'\n"
                 "Parameter: s\n"
-                "Value: hello\n"
-
-                "Example:\n"
-                "User request: Replace all numbers in "
-                "'Hello 34 I'm 233 years old' with NUMBERS\n"
-                "Parameter: source_string\n"
-                "Value: Hello 34 I'm 233 years old\n\n"
-
-                "Example:\n"
-                "User request: Replace all numbers in "
-                "'Hello 34 I'm 233 years old' with NUMBERS\n"
+                "Value: hello\n\n"
+                "User request: Replace all numbers in 'Hello 34' with NUMBERS\n"
                 "Parameter: regex\n"
-                "Value: \\d+\n"
-
-                "Example:\n"
-                "User request: Replace all numbers in "
-                "'Hello 34 I'm 233 years old' with NUMBERS\n"
+                "Value: \\d+\n\n"
+                "User request: Replace all numbers in 'Hello 34' with NUMBERS\n"
                 "Parameter: replacement\n"
-                "Value: NUMBERS\n"
-
-                "Example:\n"
-                "User request: Replace all vowels in "
-                "'Programming is fun' with asterisks\n"
+                "Value: NUMBERS\n\n"
+                "User request: Replace all vowels in 'abc' with asterisks\n"
                 "Parameter: regex\n"
-                "Value: [aeiouAEIOU]\n"
-
-                "Example:\n"
-                "User request: Replace all vowels in "
-                "'Programming is fun' with asterisks\n"
+                "Value: /aeiou/\n\n"
+                "User request: Replace all vowels in 'abc' with asterisks\n"
                 "Parameter: replacement\n"
-                "Value: *\n"
-
+                "Value: *\n\n"
                 f"User request: {user_prompt}\n"
                 f"Parameter: {param_name}\n"
                 "Value:"

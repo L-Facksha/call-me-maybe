@@ -11,11 +11,11 @@ def parse_args() -> argparse.Namespace:
                         default="data/input/function_calling_tests.json")
     parser.add_argument("--output", type=str,
                         default="data/output/function_calling_results.json")
-
     return parser.parse_args()
 
 
 def main() -> int:
+    start = time.perf_counter()
     args = parse_args()
 
     try:
@@ -31,7 +31,7 @@ def main() -> int:
         prompts = load_test_prompts(args.input)
 
         if not functions or not prompts:
-            print("[ERROR] No functiond or prompts loaded!", file=sys.stderr)
+            print("[ERROR] No functions or prompts loaded!", file=sys.stderr)
             return 1
 
         print("[INFO] Loading model...", file=sys.stderr)
@@ -42,9 +42,8 @@ def main() -> int:
 
         save_results(results, args.output)
         print(f"[INFO] Results saved to {args.output}", file=sys.stderr)
-        end_time = time.perf_counter()
-        duration = end_time - start
-        print(f"[TIME: {duration}]")
+        duration = time.perf_counter() - start
+        print(f"[TIME: {duration:.2f}s]")
         return 0
 
     except Exception as error:
@@ -53,5 +52,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    start = time.perf_counter()
     sys.exit(main())
