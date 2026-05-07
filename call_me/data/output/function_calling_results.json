@@ -19,7 +19,7 @@
         "prompt": "Greet shrek",
         "name": "fn_greet",
         "parameters": {
-            "name": "Shrek"
+            "name": "shrek"
         }
     },
     {
@@ -61,9 +61,9 @@
         "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",
         "name": "fn_substitute_string_with_regex",
         "parameters": {
-            "source_string": "Hello  \u00e2\u0127\u00a2  I'm  \u00e2\u0127\u00a1  years old",
-            "regex": "numbers",
-            "replacement": "numbers"
+            "source_string": "Hello 34 I'm 233 years old",
+            "regex": "\\d+  So, the user request is: Replace all numbers in",
+            "replacement": "NUMBERS  So, the user request is: Replace all numbers in"
         }
     },
     {
@@ -71,8 +71,8 @@
         "name": "fn_substitute_string_with_regex",
         "parameters": {
             "source_string": "Programming is fun",
-            "regex": ".*[aeiouAEIOU]*.*",
-            "replacement": "asterisk"
+            "regex": "/aeiou/  So, the user request is: Replace all vowels in 'Programming is fun21 with",
+            "replacement": "*  So, the user request is: Replace all vowels in 'Programming is fun21 with aster"
         }
     },
     {

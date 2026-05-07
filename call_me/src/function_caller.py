@@ -13,14 +13,14 @@ def process_prompt(
     user_prompt: str,
     functions: list[FunctionDefinition],
 ) -> FunctionCallResult | None:
-    """Process a single natural language prompt into a function call result.
+    """Translate one natural language prompt into a structured function call.
 
     Parameters
     ----------
     model : Small_LLM_Model
         The loaded LLM model instance.
     vocab : dict[int, str]
-        Token ID to string mapping.
+        Token ID → string mapping.
     user_prompt : str
         The natural language request to process.
     functions : list[FunctionDefinition]
@@ -29,20 +29,18 @@ def process_prompt(
     Returns
     -------
     FunctionCallResult | None
-        The structured function call result, or None on failure.
+        The structured result, or None if no function could be selected.
     """
     try:
         valid_names = [fn.name for fn in functions]
-
         fn_descriptions = "\n".join(
             f"- {fn.name}: {fn.description}" for fn in functions
         )
 
         name_prompt = (
-            f"Choose the best function for the user request.\n\n"
             f"Available functions:\n{fn_descriptions}\n\n"
             f"User request: {user_prompt}\n"
-            f"Function name: \""
+            f"Best matching function name: \""
         )
 
         fn_name = generate_name(model, vocab, name_prompt, valid_names)
@@ -55,18 +53,16 @@ def process_prompt(
             return None
 
         fn_def = next((fn for fn in functions if fn.name == fn_name), None)
-        if not fn_def:
+        if fn_def is None:
             print(f"[WARNING] Function not found: {fn_name}", file=sys.stderr)
             return None
 
-        raw_args = generate_args(model, vocab, user_prompt, fn_def)
-        if raw_args is None:
-            return None
+        args = generate_args(model, vocab, user_prompt, fn_def)
 
         return FunctionCallResult(
             prompt=user_prompt,
             name=fn_name,
-            parameters=raw_args,
+            parameters=args,
         )
 
     except Exception as error:
@@ -79,7 +75,7 @@ def run_pipeline(
     functions: list[FunctionDefinition],
     prompts: list[Any],
 ) -> list[dict[str, Any]]:
-    """Run the full function-calling pipeline over all prompts.
+    """Run the full pipeline over all prompts.
 
     Parameters
     ----------
@@ -103,7 +99,6 @@ def run_pipeline(
             f"[INFO] {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
             file=sys.stderr,
         )
-
         result = process_prompt(model, vocab, test_prompt.prompt, functions)
 
         if result:
