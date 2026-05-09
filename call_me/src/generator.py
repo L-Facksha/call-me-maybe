@@ -66,7 +66,8 @@ def _extract_string_for_param(
         return None
 
     if len(candidates) == total_string_params:
-        in_match = re.search(r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
+        in_match = re.search(
+            r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
         if in_match and total_string_params >= 2:
             source_val = in_match.group(1)
             rest = [c for c in candidates if c != source_val]
@@ -126,45 +127,66 @@ def generate_number(
     prompt: str,
     user_prompt: str,
     param_index: int,
-    max_token: int = 15,
+    max_token: int = 20,
 ) -> float:
-    numbers = [float(m) for m in re.findall(r"-?\d+(?:\.\d+)?", user_prompt)]
-    if param_index < len(numbers):
-        return numbers[param_index]
+
+    # STEP 1: extract ALL numbers from user prompt (ground truth candidates)
+    candidates = [m.group()
+                  for m in re.finditer(r"-?\d+(?:\.\d+)?", user_prompt)]
+
+    if not candidates:
+        return 0.0
+
+    # pick the target number we want (a, b, etc.)
+    target = candidates[param_index] if param_index < len(
+        candidates) else candidates[0]
+
+    # convert to token sequence
+    target_tokens = list(target)
 
     ids = model.encode(prompt)[0].tolist()
     current = ""
 
+    # STEP 2: constrained decoding (ONLY match target number)
     for _ in range(max_token):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
+
+        valid_ids = []
 
         for tid in range(len(logits)):
             if tid not in vocab:
                 logits[tid] = -np.inf
                 continue
-            clean = _clean(vocab[tid]).strip()
-            if not clean:
+
+            tok = _clean(vocab[tid]).strip()
+            if not tok:
                 logits[tid] = -np.inf
                 continue
-            if not current and clean[0] not in "0123456789-+.":
+
+            # only allow tokens that help build the target number
+            if not target.startswith(current + tok):
                 logits[tid] = -np.inf
-            elif current and not all(c in "0123456789.eE+-" for c in clean):
-                logits[tid] = -np.inf
+                continue
+
+            valid_ids.append(tid)
 
         if np.all(np.isneginf(logits)):
             break
 
         next_id = int(np.argmax(logits))
-        if next_id not in vocab:
+        tok = _clean(vocab[next_id]).strip()
+
+        ids.append(next_id)
+        current += tok
+
+        # STOP if exact match
+        if current == target:
             break
 
-        clean = _clean(vocab[next_id]).strip()
-        ids.append(next_id)
-        current += clean
-
+    # STEP 3: return final parsed number
     try:
-        return float(current) if current else 0.0
-    except ValueError:
+        return float(target)
+    except:
         return 0.0
 
 
@@ -178,7 +200,8 @@ def generate_string(
     max_token: int = 60,
 ) -> str:
     # Try direct extraction first.
-    direct = _extract_string_for_param(user_prompt, param_index, total_string_params)
+    direct = _extract_string_for_param(
+        user_prompt, param_index, total_string_params)
     if direct is not None:
         return direct
 
@@ -262,10 +285,36 @@ def generate_args(
 
         if param_def.type == "number":
             prompt = (
-                f"Request: \"{user_prompt}\"\n"
-                f"Function: {func.name} - {func.description}\n"
-                f"What is the numeric value of parameter '{param_name}'?\n"
-                f"Write only the number: "
+                "Extract the numeric value from the user request.\n"
+                "Return ONLY the number.\n"
+                "No explanation. No extra text.\n\n"
+
+                "Rules:\n"
+                "- keep negative sign if present\n"
+                "- keep decimal numbers\n"
+                "- ignore all words\n"
+                "- output must be a valid number\n\n"
+
+                "Examples:\n\n"
+
+                "Request: What is 2 + 3?\n"
+                "Value: 2\n\n"
+
+                "Request: Add 10 and -7\n"
+                "Value: 10\n\n"
+
+                "Request: Add 10 and -7\n"
+                "Value: -7\n\n"
+
+                "Request: 5.5 multiplied by 2\n"
+                "Value: 5.5\n\n"
+
+                "Request: square root of 144\n"
+                "Value: 144\n\n"
+
+                f"Request: {user_prompt}\n"
+                f"Parameter: {param_name}\n"
+                "Value:"
             )
             parameters[param_name] = generate_number(
                 model, vocab, prompt, user_prompt, num_idx
