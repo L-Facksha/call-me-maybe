@@ -11,34 +11,34 @@ if TYPE_CHECKING:
     from src.models import FunctionDefinition
 
 
-def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
-    tokenizer = model._tokenizer
-
-    vocab = {}
-
-    for token, tid in tokenizer.get_vocab().items():
-        vocab[tid] = token
-
-    return vocab
-
 # def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
-#     vocab_path = Path(model.get_path_to_vocab_file())
+#     tokenizer = model._tokenizer
 
-#     with open(vocab_path, "r", encoding="utf-8") as f:
-#         raw = json.load(f)
+#     vocab = {}
 
-#     vocab: dict[int, str] = {}
-
-#     for k, v in raw.items():
-#         try:
-#             vocab[int(k)] = str(v)
-#         except:
-#             try:
-#                 vocab[int(v)] = str(k)
-#             except:
-#                 continue
+#     for token, tid in tokenizer.get_vocab().items():
+#         vocab[tid] = token
 
 #     return vocab
+
+def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
+    vocab_path = Path(model.get_path_to_vocab_file())
+
+    with open(vocab_path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    vocab: dict[int, str] = {}
+
+    for k, v in raw.items():
+        try:
+            vocab[int(k)] = str(v)
+        except Exception:
+            try:
+                vocab[int(v)] = str(k)
+            except Exception:
+                continue
+
+    return vocab
 
 # def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
 #     vocab_path = Path(model.get_path_to_vocab_file())
@@ -216,7 +216,7 @@ def generate_number(
             break
 
     try:
-        return float(current)
+        return float(target)
     except (ValueError, TypeError):
         return 0.0
 
