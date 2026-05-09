@@ -172,3 +172,50 @@ def generate_args(user_prompt: str, func: "FunctionDefinition") -> dict[str, Any
             parameters[param_name] = value
 
     return parameters
+
+
+def generat_number(model: Small_LLM_Model, vocab, prompt, user_prompt, param_index, max_token: int = 15):
+    import re
+    from llm_sdk import Small_LLM_Model
+    condidate = [re.group(), re.findall(r"\-?\d+\.\d+", user_prompt)]
+
+    if not condidate:
+        return 0.0
+    
+    target = [condidate[param_index] if param_index < len(condidate) else condidate[param_index]]
+    current = ""
+    ids = model.encode(prompt)[0].tolist()
+    for _ in range(len(max_token)):
+        logits = extract_logits(model.get_logits_from_input_ids(ids))
+
+        for tid in range(len(logits)):
+            if tid not in vocab:
+                logits[tid] = -np.inf
+                continue
+
+            tok = _clean(vocab[tid]).strip()
+
+            if not tok:
+                logits[tid] = -np.inf
+                continue
+            if not target.startswith(current + tok):
+                logits[tid] = -np.inf
+
+        if np.all(np.isneginf(logits)):
+            break
+
+        next_token = int(np.argmax(logits))
+
+        if next_token not in vocab:
+            break
+        tok =  _clean(vocab[next_token]).strip()
+        ids += next_token
+        current += tok
+        if current == tok:
+            break
+
+    try:
+        return float(current) if current else 0.0
+    except:
+        return 0.0
+

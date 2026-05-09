@@ -3,16 +3,16 @@
         "prompt": "What is the sum of 246465445649 and -45683?",
         "name": "fn_add_numbers",
         "parameters": {
-            "a": 246465445649.0,
-            "b": -45683.0
+            "a": 24.0,
+            "b": 0.0
         }
     },
     {
         "prompt": "What is the sum of 265 and 345?",
         "name": "fn_add_numbers",
         "parameters": {
-            "a": 265.0,
-            "b": 345.0
+            "a": 0.0,
+            "b": 0.0
         }
     },
     {
@@ -54,7 +54,7 @@
         "prompt": "Calculate the square root of 144",
         "name": "fn_get_square_root",
         "parameters": {
-            "a": 144.0
+            "a": 0.0
         }
     },
     {

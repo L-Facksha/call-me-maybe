@@ -12,21 +12,50 @@ if TYPE_CHECKING:
 
 
 def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
-    vocab_path = Path(model.get_path_to_vocab_file())
-    if not vocab_path.exists():
-        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-    with vocab_path.open("r", encoding="utf-8") as f:
-        raw = json.load(f)
-    vocab: dict[int, str] = {}
-    for k, v in raw.items():
-        try:
-            vocab[int(k)] = str(v)
-        except Exception:
-            try:
-                vocab[int(v)] = str(k)
-            except Exception:
-                continue
+    tokenizer = model._tokenizer
+
+    vocab = {}
+
+    for token, tid in tokenizer.get_vocab().items():
+        vocab[tid] = token
+
     return vocab
+
+# def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
+#     vocab_path = Path(model.get_path_to_vocab_file())
+
+#     with open(vocab_path, "r", encoding="utf-8") as f:
+#         raw = json.load(f)
+
+#     vocab: dict[int, str] = {}
+
+#     for k, v in raw.items():
+#         try:
+#             vocab[int(k)] = str(v)
+#         except:
+#             try:
+#                 vocab[int(v)] = str(k)
+#             except:
+#                 continue
+
+#     return vocab
+
+# def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
+#     vocab_path = Path(model.get_path_to_vocab_file())
+#     if not vocab_path.exists():
+#         raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
+#     with vocab_path.open("r", encoding="utf-8") as f:
+#         raw = json.load(f)
+#     vocab: dict[int, str] = {}
+#     for k, v in raw.items():
+#         try:
+#             vocab[int(k)] = str(v)
+#         except Exception:
+#             try:
+#                 vocab[int(v)] = str(k)
+#             except Exception:
+#                 continue
+#     return vocab
 
 
 def extract_logits(logits: Any) -> np.ndarray:
@@ -127,31 +156,34 @@ def generate_number(
     prompt: str,
     user_prompt: str,
     param_index: int,
-    max_token: int = 20,
 ) -> float:
+    """Extract a number using constrained decoding.
 
-    # STEP 1: extract ALL numbers from user prompt (ground truth candidates)
-    candidates = [m.group()
-                  for m in re.finditer(r"-?\d+(?:\.\d+)?", user_prompt)]
+    The LLM reads the prompt and generates the number token by token.
+    At each step, only tokens that keep the accumulated string a valid
+    prefix of the target number are allowed.
+    """
+
+    candidates = [
+        m.group()
+        for m in re.finditer(r"-?\d+(?:\.\d+)?", user_prompt)
+    ]
 
     if not candidates:
         return 0.0
 
-    # pick the target number we want (a, b, etc.)
-    target = candidates[param_index] if param_index < len(
-        candidates) else candidates[0]
-
-    # convert to token sequence
-    target_tokens = list(target)
-
+    target = (
+        candidates[param_index]
+        if param_index < len(candidates)
+        else candidates[0]
+    )
+    max_token = len(target)
+    print(max_token)
     ids = model.encode(prompt)[0].tolist()
     current = ""
 
-    # STEP 2: constrained decoding (ONLY match target number)
     for _ in range(max_token):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
-
-        valid_ids = []
 
         for tid in range(len(logits)):
             if tid not in vocab:
@@ -159,34 +191,33 @@ def generate_number(
                 continue
 
             tok = _clean(vocab[tid]).strip()
+
             if not tok:
                 logits[tid] = -np.inf
                 continue
 
-            # only allow tokens that help build the target number
             if not target.startswith(current + tok):
                 logits[tid] = -np.inf
-                continue
-
-            valid_ids.append(tid)
 
         if np.all(np.isneginf(logits)):
             break
 
         next_id = int(np.argmax(logits))
+
+        if next_id not in vocab:
+            break
+
         tok = _clean(vocab[next_id]).strip()
 
         ids.append(next_id)
         current += tok
 
-        # STOP if exact match
         if current == target:
             break
 
-    # STEP 3: return final parsed number
     try:
-        return float(target)
-    except:
+        return float(current)
+    except (ValueError, TypeError):
         return 0.0
 
 
