@@ -11,35 +11,48 @@ if TYPE_CHECKING:
     from src.models import FunctionDefinition
 
 
-# def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
-#     tokenizer = model._tokenizer
-
-#     vocab = {}
-
-#     for token, tid in tokenizer.get_vocab().items():
-#         vocab[tid] = token
-
-#     return vocab
-
-def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
+def load_vocab(model: Small_LLM_Model) -> dict[str, int]:
     vocab_path = Path(model.get_path_to_vocab_file())
     if not vocab_path.exists():
         raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
     with vocab_path.open("r", encoding="utf-8") as f:
-        raw = json.load(f)
-
-    vocab: dict[int, str] = {}
-
-    for k, v in raw.items():
-        try:
-            vocab[int(k)] = str(v)
-        except Exception:
-            try:
-                vocab[int(v)] = str(k)
-            except Exception:
-                continue
+        vocab = json.load(f)
 
     return vocab
+
+
+def encode_prompt(prompt: str, vocab: dict[str, int]) -> list[int]:
+    prompt = prompt.replace(" ", "Ġ")
+
+    sorted_vocab = sorted(vocab.items(), key=lambda x: len(x[0]), reverse=True)
+    i = 0
+    ids = []
+    while i < len(prompt):
+        best_match = None
+        for token, tid in sorted_vocab:
+            if prompt.startswith(token, i):
+                best_match = (tid, token)
+                break
+        if best_match is None:
+            i += 1
+            continue
+
+        tid, token = best_match
+        ids.append(tid)
+        i += len(token)
+
+    return ids
+
+
+def decode_prompt(ids: list[int], vocab: dict[str, int]):
+    reverce_vocab = {tid: token for token, tid in vocab.items()}
+
+    text = ""
+    for tid in ids:
+        if tid not in reverce_vocab:
+            continue
+        text += reverce_vocab[tid]
+    return text
 
 
 def extract_logits(logits: Any) -> np.ndarray:
@@ -59,22 +72,29 @@ def _clean(token: str) -> str:
 
 def generate_name(
     model: Small_LLM_Model,
-    vocab: dict[int, str],
+    vocab: dict[str, int],
     prompt: str,
     valid_names: list[str],
     max_token: int = 15,
 ) -> str:
     current = ""
-    ids = model.encode(prompt)[0].tolist()
+
+    ids = encode_prompt(prompt, vocab)
+
+    id_to_token = {
+        tid: token
+        for token, tid in vocab.items()
+    }
 
     for _ in range(max_token):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
-            if tid not in vocab:
+
+            if tid not in id_to_token:
                 logits[tid] = -np.inf
                 continue
-            clean = _clean(vocab[tid]).strip()
+            clean = _clean(id_to_token[tid]).strip()
             if clean == '"':
                 if current not in valid_names:
                     logits[tid] = -np.inf
@@ -87,10 +107,10 @@ def generate_name(
             break
 
         next_id = int(np.argmax(logits))
-        if next_id not in vocab:
+        if next_id not in id_to_token:
             break
 
-        clean = _clean(vocab[next_id]).strip()
+        clean = _clean(id_to_token[next_id]).strip()
         ids.append(next_id)
 
         if clean == '"':
@@ -102,7 +122,7 @@ def generate_name(
 
 def generate_number(
     model: Small_LLM_Model,
-    vocab: dict[int, str],
+    vocab: dict[str, int],
     prompt: str,
     user_prompt: str,
     param_index: int,
@@ -129,18 +149,24 @@ def generate_number(
     )
     max_token = len(target)
     print(max_token)
-    ids = model.encode(prompt)[0].tolist()
+    ids = encode_prompt(prompt, vocab)
+    id_to_token = {
+        tid: token
+        for token, tid in vocab.items()
+    }
+
     current = ""
 
     for _ in range(max_token):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
-            if tid not in vocab:
+
+            if tid not in id_to_token:
                 logits[tid] = -np.inf
                 continue
 
-            tok = _clean(vocab[tid]).strip()
+            tok = _clean(id_to_token[tid]).strip()
 
             if not tok:
                 logits[tid] = -np.inf
@@ -154,10 +180,10 @@ def generate_number(
 
         next_id = int(np.argmax(logits))
 
-        if next_id not in vocab:
+        if next_id not in id_to_token:
             break
 
-        tok = _clean(vocab[next_id]).strip()
+        tok = _clean(id_to_token[next_id]).strip()
 
         ids.append(next_id)
         current += tok
@@ -166,7 +192,7 @@ def generate_number(
             break
 
     try:
-        return float(target)
+        return float(current)
     except (ValueError, TypeError):
         return 0.0
 
@@ -207,76 +233,64 @@ def _extract_string_for_param(
 
 def generate_string(
     model: Small_LLM_Model,
-    vocab: dict[int, str],
+    vocab: dict[str, int],
     prompt: str,
-    user_prompt: str,
-    param_index: int,
-    total_string_params: int,
-    max_token: int = 60,
+    max_token: int = 30,
 ) -> str:
-    # Try direct extraction first.
-    direct = _extract_string_for_param(
-        user_prompt, param_index, total_string_params)
-    if direct is not None:
-        return direct
 
-    # LLM fallback with constrained decoding.
-    ids = model.encode(prompt)[0].tolist()
+    ids = encode_prompt(prompt, vocab)
+
+    id_to_token = {
+        tid: token
+        for token, tid in vocab.items()
+    }
+
     current = ""
 
     for _ in range(max_token):
-        logits = extract_logits(model.get_logits_from_input_ids(ids))
+
+        logits = extract_logits(
+            model.get_logits_from_input_ids(ids)
+        )
 
         for tid in range(len(logits)):
-            if tid not in vocab:
+
+            if tid not in id_to_token:
                 logits[tid] = -np.inf
                 continue
-            clean = _clean(vocab[tid])
-            # Block newlines — everything after a newline is hallucination.
-            if "\n" in clean:
+
+            token = _clean(id_to_token[tid])
+
+            # stop hallucinations
+            if "\n" in token:
                 logits[tid] = -np.inf
                 continue
-            if any(c in clean for c in ["{", "}", "[", "]"]):
+
+            if any(c in token for c in ["{", "}", "[", "]"]):
                 logits[tid] = -np.inf
                 continue
-            # Block bare digit tokens when current already has non-digit content
-            # (stops "asterisk24", "regex16", etc.)
-            if current and clean.strip().isdigit() and not current.strip().lstrip("-").replace(".", "").isdigit():
-                logits[tid] = -np.inf
 
         if np.all(np.isneginf(logits)):
             break
 
         next_id = int(np.argmax(logits))
-        if next_id not in vocab:
+
+        if next_id not in id_to_token:
             break
 
-        clean = _clean(vocab[next_id])
+        token = _clean(id_to_token[next_id])
+
         ids.append(next_id)
 
-        if '"' in clean:
-            current += clean.split('"')[0]
-            return current.strip()
+        # stop on quote
+        if '"' in token or "'" in token:
+            break
 
-        current += clean
+        # stop if model starts explaining
+        if "User" in token or "Parameter" in token:
+            break
 
-        # If current is a single special character, it's complete — stop now.
-        # Prevents "*asterisked", "?extra", etc.
-        if current.strip() in ("*", "+", "?", "!", "#", "@", "^", "~"):
-            return current.strip()
-
-        # Stop as soon as the model starts adding explanations.
-        # Hallucination always begins with " (" e.g. "\d+ (case-insensitive..."
-        if " (" in current:
-            current = current.split(" (")[0]
-            return current.strip()
-
-        if "  " in current:
-            current = current.split("  ")[0]
-            return current.strip()
-
-        if len(current) > 80:
-            return current.strip()
+        current += token
 
     return current.strip()
 
@@ -363,8 +377,7 @@ def generate_args(
                 "Value:"
             )
             parameters[param_name] = generate_string(
-                model, vocab, prompt, user_prompt,
-                str_idx, len(string_params)
+                model, vocab, prompt
             )
             str_idx += 1
 

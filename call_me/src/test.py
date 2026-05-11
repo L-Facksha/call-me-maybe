@@ -219,15 +219,93 @@ if TYPE_CHECKING:
 #     except:
 #         return 0.0
 
-def test(model: Small_LLM_Model):
+# def test(model: Small_LLM_Model):
+#     vocab_path = Path(model.get_path_to_tokenizer_file())
+
+#     with open(vocab_path, "r", encoding="utf-8") as f:
+#         raw = json.load(f)
+
+#     return raw
+
+
+# r = Small_LLM_Model()
+# t = test(r)
+# print(t)
+# from pathlib import Path
+# import json
+# model = Small_LLM_Model()
+# vocab_path = Path(model.get_path_to_vocab_file())
+
+# with open(vocab_path, "r", encoding="utf-8") as f:
+#     raw = json.load(f)
+
+# # print(raw.keys())
+# # print(raw["model"].keys())
+# vocab = raw
+# print(vocab)
+
+def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
     vocab_path = Path(model.get_path_to_vocab_file())
+    if not vocab_path.exists():
+        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
+    with vocab_path.open("r", encoding="utf-8") as f:
+        vocab = json.load(f)
+    id_to_token = {
+        tid: token
+        for token, tid in vocab.items()
+    }
+    print(id_to_token)
+    return id_to_token
 
-    with open(vocab_path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
 
-    return raw
+model = Small_LLM_Model()
+load_vocab(model)
+# print(type(vocab))
+# print(len(vocab))
+# print(list(vocab.items())[:20])
 
 
-r = Small_LLM_Model()
-t = test(r)
-print(t)
+# def fixed_encode(text, vocab):
+#     text = text.replace(" ", "Ġ")  # IMPORTANT
+
+#     i = 0
+#     ids = []
+
+#     while i < len(text):
+#         best = None
+
+#         for token, tid in vocab.items():
+#             if text.startswith(token, i):
+#                 if best is None or len(token) > len(best[0]):
+#                     best = (token, tid)
+
+#         if best is None:
+#             i += 1
+#             continue
+
+#         ids.append(best[1])
+#         i += len(best[0])
+
+#     return ids
+
+
+# ids = fixed_encode("What is the sum of 246465445649 and -45683?", vocab)
+
+# # print(ids)
+
+
+# def manual_decode(ids, vocab):
+#     return "".join(vocab.get(i, "") for i in ids)
+
+
+# # print(vocab)
+# print(manual_decode(ids, vocab))
+# # model = Small_LLM_Model()
+# text = "What is the sum of 2 and 3?"
+
+# model_ids = model.encode(text)[0].tolist()
+# manual_ids = fixed_encode(text, vocab)
+
+# print("Model IDs:  ", model_ids)
+# print("Manual IDs: ", manual_ids)
+# print("Match:", model_ids == manual_ids)
