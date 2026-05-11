@@ -23,8 +23,9 @@ if TYPE_CHECKING:
 
 def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
     vocab_path = Path(model.get_path_to_vocab_file())
-
-    with open(vocab_path, "r", encoding="utf-8") as f:
+    if not vocab_path.exists():
+        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
+    with vocab_path.open("r", encoding="utf-8") as f:
         raw = json.load(f)
 
     vocab: dict[int, str] = {}
@@ -40,23 +41,6 @@ def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
 
     return vocab
 
-# def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
-#     vocab_path = Path(model.get_path_to_vocab_file())
-#     if not vocab_path.exists():
-#         raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-#     with vocab_path.open("r", encoding="utf-8") as f:
-#         raw = json.load(f)
-#     vocab: dict[int, str] = {}
-#     for k, v in raw.items():
-#         try:
-#             vocab[int(k)] = str(v)
-#         except Exception:
-#             try:
-#                 vocab[int(v)] = str(k)
-#             except Exception:
-#                 continue
-#     return vocab
-
 
 def extract_logits(logits: Any) -> np.ndarray:
     if hasattr(logits, "shape"):
@@ -71,40 +55,6 @@ def extract_logits(logits: Any) -> np.ndarray:
 
 def _clean(token: str) -> str:
     return token.replace("Ġ", " ").replace("▁", " ").replace("Ċ", "\n")
-
-
-def _extract_string_for_param(
-    user_prompt: str,
-    param_index: int,
-    total_string_params: int,
-) -> str | None:
-    """Extract the correct string value for a parameter from the user prompt.
-
-    - "... X ... in 'SOURCE'" pattern: string after "in" is the source (first param).
-    - Normal positional: first quote → first param, second → second, etc.
-    - No quotes + single param: take the last word.
-    - Returns None when the param cannot be extracted (LLM fallback used).
-    """
-    quoted = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
-    candidates = [a if a else b for a, b in quoted]
-
-    if not candidates:
-        if total_string_params == 1 and param_index == 0:
-            words = user_prompt.strip().split()
-            return words[-1] if words else None
-        return None
-
-    if len(candidates) == total_string_params:
-        in_match = re.search(
-            r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
-        if in_match and total_string_params >= 2:
-            source_val = in_match.group(1)
-            rest = [c for c in candidates if c != source_val]
-            ordered = [source_val] + rest
-            return ordered[param_index] if param_index < len(ordered) else None
-        return candidates[param_index] if param_index < len(candidates) else None
-
-    return candidates[param_index] if param_index < len(candidates) else None
 
 
 def generate_name(
@@ -219,6 +169,40 @@ def generate_number(
         return float(target)
     except (ValueError, TypeError):
         return 0.0
+
+
+def _extract_string_for_param(
+    user_prompt: str,
+    param_index: int,
+    total_string_params: int,
+) -> str | None:
+    """Extract the correct string value for a parameter from the user prompt.
+
+    - "... X ... in 'SOURCE'" pattern: string after "in" is the source (first param).
+    - Normal positional: first quote → first param, second → second, etc.
+    - No quotes + single param: take the last word.
+    - Returns None when the param cannot be extracted (LLM fallback used).
+    """
+    quoted = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
+    candidates = [a if a else b for a, b in quoted]
+
+    if not candidates:
+        if total_string_params == 1 and param_index == 0:
+            words = user_prompt.strip().split()
+            return words[-1] if words else None
+        return None
+
+    if len(candidates) == total_string_params:
+        in_match = re.search(
+            r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
+        if in_match and total_string_params >= 2:
+            source_val = in_match.group(1)
+            rest = [c for c in candidates if c != source_val]
+            ordered = [source_val] + rest
+            return ordered[param_index] if param_index < len(ordered) else None
+        return candidates[param_index] if param_index < len(candidates) else None
+
+    return candidates[param_index] if param_index < len(candidates) else None
 
 
 def generate_string(
