@@ -197,100 +197,104 @@ def generate_number(
         return 0.0
 
 
-def _extract_string_for_param(
-    user_prompt: str,
-    param_index: int,
-    total_string_params: int,
-) -> str | None:
-    """Extract the correct string value for a parameter from the user prompt.
-
-    - "... X ... in 'SOURCE'" pattern: string after "in" is the source (first param).
-    - Normal positional: first quote → first param, second → second, etc.
-    - No quotes + single param: take the last word.
-    - Returns None when the param cannot be extracted (LLM fallback used).
-    """
-    quoted = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
-    candidates = [a if a else b for a, b in quoted]
-
-    if not candidates:
-        if total_string_params == 1 and param_index == 0:
-            words = user_prompt.strip().split()
-            return words[-1] if words else None
-        return None
-
-    if len(candidates) == total_string_params:
-        in_match = re.search(
-            r"\bin\s+['\"]([^'\"]+)['\"]", user_prompt, re.IGNORECASE)
-        if in_match and total_string_params >= 2:
-            source_val = in_match.group(1)
-            rest = [c for c in candidates if c != source_val]
-            ordered = [source_val] + rest
-            return ordered[param_index] if param_index < len(ordered) else None
-        return candidates[param_index] if param_index < len(candidates) else None
-
-    return candidates[param_index] if param_index < len(candidates) else None
-
-
 def generate_string(
     model: Small_LLM_Model,
     vocab: dict[str, int],
     prompt: str,
-    max_token: int = 30,
+    max_token: int = 60,
 ) -> str:
+    """Generate a string value using constrained decoding.
 
+    The few-shot prompt format uses newlines as value terminators:
+        Value: john\n
+        Value: hello\n
+    So we stop when the model generates a newline token — that is the
+    natural end of the value. Quotes are NOT stop signals because they
+    are valid content characters (e.g. "I'm", "Hello 34 I'm 233...",
+    'cat', 'dog'). Blocking quotes would truncate these values.
+
+    Parameters
+    ----------
+    model : Small_LLM_Model
+        The loaded LLM model instance.
+    vocab : dict[str, int]
+        Token string to ID mapping.
+    prompt : str
+        Extraction prompt ending just before the value.
+    max_token : int
+        Hard cap on decoding steps.
+
+    Returns
+    -------
+    str
+        The extracted string value.
+    """
     ids = encode_prompt(prompt, vocab)
-
-    id_to_token = {
-        tid: token
-        for token, tid in vocab.items()
-    }
-
+    id_to_token = {tid: token for token, tid in vocab.items()}
     current = ""
 
     for _ in range(max_token):
-
-        logits = extract_logits(
-            model.get_logits_from_input_ids(ids)
-        )
+        logits = extract_logits(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
-
             if tid not in id_to_token:
                 logits[tid] = -np.inf
                 continue
 
             token = _clean(id_to_token[tid])
 
-            # stop hallucinations
+            # Newline = end of value in the few-shot prompt format
             if "\n" in token:
                 logits[tid] = -np.inf
                 continue
 
+            # Block structural JSON chars
             if any(c in token for c in ["{", "}", "[", "]"]):
                 logits[tid] = -np.inf
                 continue
+
+            # Block digit-only tokens after non-numeric content
+            # (prevents "shrek24", "name16" suffixes)
+            if (current
+                    and token.strip().isdigit()
+                    and not current.strip().lstrip("-").replace(".", "").isdigit()):
+                logits[tid] = -np.inf
 
         if np.all(np.isneginf(logits)):
             break
 
         next_id = int(np.argmax(logits))
-
         if next_id not in id_to_token:
             break
 
         token = _clean(id_to_token[next_id])
 
+        # Stop when the model generates a newline — value is complete
+        if "\n" in token:
+            # Grab anything before the newline on the same token
+            current += token.split("\n")[0]
+            break
+
         ids.append(next_id)
-
-        # stop on quote
-        if '"' in token or "'" in token:
-            break
-
-        # stop if model starts explaining
-        if "User" in token or "Parameter" in token:
-            break
-
         current += token
+
+        # Stop if model starts writing the next prompt line
+        for word in ("Parameter", "User", "Request"):
+            if word in current:
+                current = current.split(word)[0]
+                return current.strip()
+
+        # Single special char is a complete value (e.g. "*")
+        if current.strip() in ("*", "+", "?", "!", "#", "@", "^", "~"):
+            break
+
+        # Stop on double-space (model is padding/rambling)
+        if "  " in current:
+            current = current.split("  ")[0]
+            break
+
+        if len(current) > 80:
+            break
 
     return current.strip()
 
