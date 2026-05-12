@@ -265,28 +265,28 @@ load_vocab(model)
 # print(list(vocab.items())[:20])
 
 
-# def fixed_encode(text, vocab):
-#     text = text.replace(" ", "Ġ")  # IMPORTANT
+def fixed_encode(text, vocab):
+    text = text.replace(" ", "Ġ")  # IMPORTANT
 
-#     i = 0
-#     ids = []
+    i = 0
+    ids = []
 
-#     while i < len(text):
-#         best = None
+    while i < len(text):
+        best = None
 
-#         for token, tid in vocab.items():
-#             if text.startswith(token, i):
-#                 if best is None or len(token) > len(best[0]):
-#                     best = (token, tid)
+        for token, tid in vocab.items():
+            if text.startswith(token, i):
+                if best is None or len(token) > len(best[0]):
+                    best = (token, tid)
 
-#         if best is None:
-#             i += 1
-#             continue
+        if best is None:
+            i += 1
+            continue
 
-#         ids.append(best[1])
-#         i += len(best[0])
+        ids.append(best[1])
+        i += len(best[0])
 
-#     return ids
+    return ids
 
 
 # ids = fixed_encode("What is the sum of 246465445649 and -45683?", vocab)

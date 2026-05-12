@@ -3,12 +3,16 @@
 from pathlib import Path
 import json
 import re
+import sys
 import numpy as np
 from typing import Any, TYPE_CHECKING
 from llm_sdk.llm_sdk import Small_LLM_Model
 
 if TYPE_CHECKING:
     from src.models import FunctionDefinition
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
 
 
 def load_vocab(model: Small_LLM_Model) -> dict[str, int]:
@@ -75,7 +79,7 @@ def generate_name(
     vocab: dict[str, int],
     prompt: str,
     valid_names: list[str],
-    max_token: int = 15,
+    max_token,
 ) -> str:
     current = ""
 
@@ -147,8 +151,13 @@ def generate_number(
         if param_index < len(candidates)
         else candidates[0]
     )
+
+    if len(target) > 9:
+        print(f"{RED}[ERROR]{RESET} max digits alowed < 10: {target}", file=sys.stderr)
+        return 0.0
+
     max_token = len(target)
-    print(max_token)
+
     ids = encode_prompt(prompt, vocab)
     id_to_token = {
         tid: token
@@ -201,7 +210,7 @@ def generate_string(
     model: Small_LLM_Model,
     vocab: dict[str, int],
     prompt: str,
-    max_token: int = 60,
+    max_token: int = 50,
 ) -> str:
     """Generate a string value using constrained decoding.
 
@@ -243,22 +252,13 @@ def generate_string(
 
             token = _clean(id_to_token[tid])
 
-            # Newline = end of value in the few-shot prompt format
-            if "\n" in token:
+            if not token:
                 logits[tid] = -np.inf
                 continue
 
-            # Block structural JSON chars
             if any(c in token for c in ["{", "}", "[", "]"]):
                 logits[tid] = -np.inf
                 continue
-
-            # Block digit-only tokens after non-numeric content
-            # (prevents "shrek24", "name16" suffixes)
-            if (current
-                    and token.strip().isdigit()
-                    and not current.strip().lstrip("-").replace(".", "").isdigit()):
-                logits[tid] = -np.inf
 
         if np.all(np.isneginf(logits)):
             break
@@ -269,26 +269,21 @@ def generate_string(
 
         token = _clean(id_to_token[next_id])
 
-        # Stop when the model generates a newline — value is complete
         if "\n" in token:
-            # Grab anything before the newline on the same token
             current += token.split("\n")[0]
             break
 
         ids.append(next_id)
         current += token
 
-        # Stop if model starts writing the next prompt line
         for word in ("Parameter", "User", "Request"):
             if word in current:
                 current = current.split(word)[0]
                 return current.strip()
 
-        # Single special char is a complete value (e.g. "*")
         if current.strip() in ("*", "+", "?", "!", "#", "@", "^", "~"):
             break
 
-        # Stop on double-space (model is padding/rambling)
         if "  " in current:
             current = current.split("  ")[0]
             break
@@ -296,7 +291,7 @@ def generate_string(
         if len(current) > 80:
             break
 
-    return current.strip()
+    return current.strip().strip("'").strip('"')
 
 
 def generate_args(
@@ -307,10 +302,6 @@ def generate_args(
 ) -> dict[str, Any]:
     parameters: dict[str, Any] = {}
 
-    string_params = [
-        n for n, p in func.parameters.items()
-        if p.type == "string"
-    ]
     num_idx = 0
     str_idx = 0
 
@@ -358,24 +349,33 @@ def generate_args(
             prompt = (
                 "Extract the parameter value from the user request.\n"
                 "Return ONLY the value, nothing else.\n\n"
-                "User request: Greet john\n"
+                "User request: Greet shrek\n"
                 "Parameter: name\n"
-                "Value: john\n\n"
+                "Value: shrek\n\n"
                 "User request: Reverse the string 'hello'\n"
                 "Parameter: s\n"
                 "Value: hello\n\n"
-                "User request: Replace all numbers in 'Hello 34' with NUMBERS\n"
+                "User request: Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS\n"
                 "Parameter: regex\n"
                 "Value: \\d+\n\n"
-                "User request: Replace all numbers in 'Hello 34' with NUMBERS\n"
+                "User request: Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS\n"
                 "Parameter: replacement\n"
                 "Value: NUMBERS\n\n"
+                "User request: Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS\n"
+                "Parameter: source_string\n"
+                "Value: Hello 34 I'm 233 years old\n\n"
                 "User request: Replace all vowels in 'abc' with asterisks\n"
                 "Parameter: regex\n"
-                "Value: /aeiou/\n\n"
+                "Value: [aeiouAEIOU]\n\n"
                 "User request: Replace all vowels in 'abc' with asterisks\n"
                 "Parameter: replacement\n"
                 "Value: *\n\n"
+                "User request: Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat' \n"
+                "Parameter: regex\n"
+                "Value: cat\n\n"
+                "User request: Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat' \n"
+                "Parameter: replacement\n"
+                "Value: dog\n\n"
                 f"User request: {user_prompt}\n"
                 f"Parameter: {param_name}\n"
                 "Value:"
@@ -384,8 +384,5 @@ def generate_args(
                 model, vocab, prompt
             )
             str_idx += 1
-
-        elif param_def.type == "boolean":
-            parameters[param_name] = False
 
     return parameters

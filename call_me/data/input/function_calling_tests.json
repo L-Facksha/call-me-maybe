@@ -1,12 +1,12 @@
 [
   {
-    "prompt": "What is the sum of 2 and 3?"
+    "prompt": "What is the sum of 246549783156169 and 9?"
   },
   {
-    "prompt": "What is the sum of 265 and 345?"
+    "prompt": "What is the sum of -456464646265 and -3?"
   },
   {
-    "prompt": "Greet shrek"
+    "prompt": "tell me a jock"
   },
   {
     "prompt": "Greet john"
@@ -21,13 +21,13 @@
     "prompt": "What is the square root of 16?"
   },
   {
-    "prompt": "Calculate the square root of 144"
+    "prompt": "how many stars in the sky"
   },
   {
     "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS"
   },
   {
-    "prompt": "Replace all vowels in 'Programming is fun' with asterisks"
+    "prompt": "Replace all vowels in 'Programming is fun' with plus"
   },
   {
     "prompt": "Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat'"

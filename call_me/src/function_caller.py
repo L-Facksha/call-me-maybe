@@ -5,6 +5,10 @@ from typing import Any
 from src.models import FunctionDefinition, FunctionCallResult
 from src.generator import load_vocab, generate_args, generate_name
 from llm_sdk import Small_LLM_Model
+GREEN = "\033[92m"
+ORANGE = "\033[38;5;214m"
+RESET = "\033[0m"
+RED = "\033[91m"
 
 
 def process_prompt(
@@ -33,8 +37,10 @@ def process_prompt(
     """
     try:
         valid_names = [fn.name for fn in functions]
+        valid_names.append("no_function")
         fn_descriptions = "\n".join(
-            f"- {fn.name}: {fn.description}" for fn in functions
+            [f"- {fn.name}: {fn.description}" for fn in functions]
+            + ["- no_function: use this if no function matches the request"]
         )
 
         name_prompt = (
@@ -42,19 +48,22 @@ def process_prompt(
             f"User request: {user_prompt}\n"
             f"Best matching function name: \""
         )
+        max_token = max(len(func) for func in valid_names)
 
-        fn_name = generate_name(model, vocab, name_prompt, valid_names)
+        fn_name = generate_name(
+            model, vocab, name_prompt, valid_names, max_token)
 
         if not fn_name or fn_name not in valid_names:
             print(
-                f"[WARNING] Could not select function for: {user_prompt!r}",
+                f"{ORANGE}[WARNING]{RESET} Could not select function for: {user_prompt!r}",
                 file=sys.stderr,
             )
             return None
 
         fn_def = next((fn for fn in functions if fn.name == fn_name), None)
-        if fn_def is None:
-            print(f"[WARNING] Function not found: {fn_name}", file=sys.stderr)
+        if fn_def == "no_function" or fn_def is None:
+            print(
+                f"{ORANGE}[WARNING]{RESET} Function not found: {fn_name}", file=sys.stderr)
             return None
 
         args = generate_args(model, vocab, user_prompt, fn_def)
@@ -66,7 +75,7 @@ def process_prompt(
         )
 
     except Exception as error:
-        print(f"[ERROR] Process failed: {error}", file=sys.stderr)
+        print(f"{RED}[ERROR]{RESET} Process failed: {error}", file=sys.stderr)
         return None
 
 
@@ -96,7 +105,7 @@ def run_pipeline(
 
     for i, test_prompt in enumerate(prompts):
         print(
-            f"[INFO] {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
+            f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
             file=sys.stderr,
         )
         result = process_prompt(model, vocab, test_prompt.prompt, functions)

@@ -1,6 +1,9 @@
 import argparse
 import sys
 import time
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,7 +26,7 @@ def main() -> int:
         from src.loader import load_function_definitions, load_test_prompts, save_results
         from src.function_caller import run_pipeline
     except Exception as error:
-        print(f"[Error] Import failed: {error}", file=sys.stderr)
+        print(f"{RED}[ERROR]{RESET} Import failed: {error}", file=sys.stderr)
         return 1
 
     try:
@@ -31,23 +34,25 @@ def main() -> int:
         prompts = load_test_prompts(args.input)
 
         if not functions or not prompts:
-            print("[ERROR] No functions or prompts loaded!", file=sys.stderr)
+            print(
+                f"{RED}[ERROR]{RESET} No functions or prompts loaded!", file=sys.stderr)
             return 1
 
-        print("[INFO] Loading model...", file=sys.stderr)
+        print(f"{GREEN}[INFO]{RESET} Loading model...", file=sys.stderr)
         model = Small_LLM_Model()
 
-        print("[INFO] Running pipeline...", file=sys.stderr)
+        print(f"{GREEN}[INFO]{RESET} Running pipeline...", file=sys.stderr)
         results = run_pipeline(model, functions, prompts)
 
         save_results(results, args.output)
-        print(f"[INFO] Results saved to {args.output}", file=sys.stderr)
+        print(
+            f"{GREEN}[INFO]{RESET} Results saved to {args.output}", file=sys.stderr)
         duration = time.perf_counter() - start
         print(f"[TIME: {duration:.2f}s]")
         return 0
 
     except Exception as error:
-        print(f"[ERROR] {error}", file=sys.stderr)
+        print(f"{RED}[ERROR]{RESET} {error}", file=sys.stderr)
         return 1
 
 
