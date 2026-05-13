@@ -1,9 +1,9 @@
 [
   {
-    "prompt": "What is the sum of 246549783156169 and 9?"
+    "prompt": "What is the sum of 3 and 5?"
   },
   {
-    "prompt": "What is the sum of -456464646265 and -3?"
+    "prompt": "What is the sum of 255 and 364?"
   },
   {
     "prompt": "tell me a jock"
@@ -12,7 +12,7 @@
     "prompt": "Greet john"
   },
   {
-    "prompt": "Reverse the string 'hello'"
+    "prompt": "who are you"
   },
   {
     "prompt": "Reverse the string 'world'"
@@ -21,7 +21,7 @@
     "prompt": "What is the square root of 16?"
   },
   {
-    "prompt": "how many stars in the sky"
+    "prompt": "what my name"
   },
   {
     "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS"

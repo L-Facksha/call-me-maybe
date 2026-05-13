@@ -20,7 +20,6 @@ def load_function_definitions(path: str) -> list[FunctionDefinition]:
     """
     result = []
     f_path = Path(path)
-
     if not f_path.exists():
         raise FileNotFoundError(f"File not found {f_path}")
     if not f_path.is_file():
@@ -31,6 +30,7 @@ def load_function_definitions(path: str) -> list[FunctionDefinition]:
             data = json.load(f)
         except json.JSONDecodeError as error:
             raise ValueError(f"Invalid json file {f_path}: {error}")
+
     for item in data:
         result.append(FunctionDefinition.model_validate(item))
     return result

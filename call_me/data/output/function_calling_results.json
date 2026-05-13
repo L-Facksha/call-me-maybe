@@ -1,47 +1,40 @@
 [
     {
-        "prompt": "What is the sum of 246549783156169 and 9?",
-        "name": "fn_add_numbers",
-        "parameters": {
-            "a": 0.0,
-            "b": 9.0
-        }
+        "prompt": "What is the sum of 3 and 5?",
+        "name": "",
+        "parameters": {}
     },
     {
-        "prompt": "What is the sum of -456464646265 and -3?",
-        "name": "fn_add_numbers",
+        "prompt": "What is the sum of 255 and 364?",
+        "name": "fn_get_square_root",
         "parameters": {
-            "a": 0.0,
-            "b": -3.0
+            "a": 255.0
         }
     },
     {
         "prompt": "tell me a jock",
-        "name": "fn_add_numbers",
-        "parameters": {
-            "a": 0.0,
-            "b": 0.0
-        }
+        "name": "",
+        "parameters": {}
     },
     {
         "prompt": "Greet john",
-        "name": "fn_greet",
+        "name": "fn_bb",
         "parameters": {
             "name": "john"
         }
     },
     {
-        "prompt": "Reverse the string 'hello'",
-        "name": "fn_reverse_string",
-        "parameters": {
-            "s": "hello"
-        }
+        "prompt": "who are you",
+        "name": "",
+        "parameters": {}
     },
     {
         "prompt": "Reverse the string 'world'",
-        "name": "fn_reverse_string",
+        "name": "fn_substitute_string_with_regex",
         "parameters": {
-            "s": "world"
+            "source_string": "world",
+            "regex": "world",
+            "replacement": "rldw"
         }
     },
     {
@@ -52,11 +45,9 @@
         }
     },
     {
-        "prompt": "how many stars in the sky",
-        "name": "fn_get_square_root",
-        "parameters": {
-            "a": 0.0
-        }
+        "prompt": "what my name",
+        "name": "",
+        "parameters": {}
     },
     {
         "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS",

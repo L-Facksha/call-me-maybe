@@ -32,7 +32,6 @@ def main() -> int:
     try:
         functions = load_function_definitions(args.functions_definition)
         prompts = load_test_prompts(args.input)
-
         if not functions or not prompts:
             print(
                 f"{RED}[ERROR]{RESET} No functions or prompts loaded!", file=sys.stderr)
