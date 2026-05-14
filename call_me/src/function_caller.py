@@ -11,27 +11,6 @@ RESET = "\033[0m"
 RED = "\033[91m"
 
 
-def rank_functions(prompt: str, functions):
-    prompt = prompt.lower()
-
-    scores = []
-
-    for fn in functions:
-        text = f"{fn.name} {fn.description}".lower()
-
-        score = 0
-
-        for word in prompt.split():
-            if word in text:
-                score += 1
-
-        scores.append((score, fn))
-
-    scores.sort(key=lambda x: x[0], reverse=True)
-
-    return scores
-
-
 def process_prompt(
     model: Small_LLM_Model,
     vocab: dict[int, str],
@@ -57,16 +36,8 @@ def process_prompt(
         The structured result, or None if no function could be selected.
     """
     try:
-        ranked = rank_functions(user_prompt, functions)
-
-        top_functions = [
-            fn.name
-            for score, fn in ranked
-            if score > 0
-        ]
-        # valid_names = [
-        #     fn.name for fn in functions if fn.name and fn.name.strip()]
-        valid_names = top_functions + ["fn_no_function"]
+        valid_names = [
+            fn.name for fn in functions if fn.name and fn.name.strip()]
 
         fn_descriptions = "\n".join(
             [f"- {fn.name}: {fn.description}" for fn in functions if fn.name and fn.name.strip()]
@@ -169,109 +140,50 @@ def process_prompt(
         return None
 
 
-# def run_pipeline(
-#     model: Small_LLM_Model,
-#     functions: list[FunctionDefinition],
-#     prompts: list[Any],
-# ) -> list[dict[str, Any]]:
-#     """Run the full pipeline over all prompts.
-
-#     Parameters
-#     ----------
-#     model : Small_LLM_Model
-#         The loaded LLM model instance.
-#     functions : list[FunctionDefinition]
-#         All available function definitions.
-#     prompts : list[Any]
-#         List of TestPrompt objects to process.
-
-#     Returns
-#     -------
-#     list[dict[str, Any]]
-#         JSON-serialisable list of function call results.
-#     """
-#     vocab = load_vocab(model)
-#     results: list[dict[str, Any]] = []
-#     i = 0
-#     miss = None
-#     for fn in functions:
-#         i += 1
-#         if fn.name.strip() == "":
-#             print(
-#                 f"{ORANGE}[WARNING]{RESET} You messing a function name fro this prompt: {prompts[i].prompt!r}"
-#             )
-#             miss = True
-#     if miss:
-#         return None
-#     for i, test_prompt in enumerate(prompts):
-#         print(
-#             f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
-#             file=sys.stderr,
-#         )
-#         result = process_prompt(model, vocab, test_prompt.prompt, functions)
-
-#         if result and result.name:
-#             results.append(result.model_dump())
-#         else:
-#             results.append({
-#                 "prompt": test_prompt.prompt,
-#                 "name": "",
-#                 "parameters": {},
-#             })
-
-#     return results
-
 def run_pipeline(
     model: Small_LLM_Model,
     functions: list[FunctionDefinition],
     prompts: list[Any],
 ) -> list[dict[str, Any]]:
+    """Run the full pipeline over all prompts.
 
+    Parameters
+    ----------
+    model : Small_LLM_Model
+        The loaded LLM model instance.
+    functions : list[FunctionDefinition]
+        All available function definitions.
+    prompts : list[Any]
+        List of TestPrompt objects to process.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        JSON-serialisable list of function call results.
+    """
     vocab = load_vocab(model)
     results: list[dict[str, Any]] = []
-
-    # validate function names
-    invalid_found = False
-
-    for idx, fn in enumerate(functions, start=1):
-
-        if not fn.name or not fn.name.strip():
-
-            print(
-                f"{ORANGE}[WARNING]{RESET} Missing function name at index {idx}",
-                file=sys.stderr,
-            )
-
-            invalid_found = True
-
-    # keep program running
-    if invalid_found:
-        print(
-            f"{ORANGE}[WARNING]{RESET} Some functions are invalid but pipeline will continue.",
-            file=sys.stderr,
-        )
-
-    # process prompts
+    # i = 0
+    # miss = None
+    # for fn in functions:
+    #     i += 1
+    #     if fn.name.strip() == "":
+    #         print(
+    #             f"{ORANGE}[WARNING]{RESET} You messing a function name fro this prompt: {prompts[i].prompt!r}"
+    #         )
+    #         miss = True
+    # if miss:
+    #     return None
     for i, test_prompt in enumerate(prompts):
-
         print(
             f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
             file=sys.stderr,
         )
-
-        result = process_prompt(
-            model,
-            vocab,
-            test_prompt.prompt,
-            functions,
-        )
+        result = process_prompt(model, vocab, test_prompt.prompt, functions)
 
         if result and result.name:
-
             results.append(result.model_dump())
-
         else:
-
             results.append({
                 "prompt": test_prompt.prompt,
                 "name": "",
@@ -279,3 +191,62 @@ def run_pipeline(
             })
 
     return results
+
+# def run_pipeline(
+#     model: Small_LLM_Model,
+#     functions: list[FunctionDefinition],
+#     prompts: list[Any],
+# ) -> list[dict[str, Any]]:
+
+#     vocab = load_vocab(model)
+#     results: list[dict[str, Any]] = []
+
+#     # validate function names
+#     invalid_found = False
+
+#     for idx, fn in enumerate(functions, start=1):
+
+#         if not fn.name or not fn.name.strip():
+
+#             print(
+#                 f"{ORANGE}[WARNING]{RESET} Missing function name at index {idx}",
+#                 file=sys.stderr,
+#             )
+
+#             invalid_found = True
+
+#     # keep program running
+#     if invalid_found:
+#         print(
+#             f"{ORANGE}[WARNING]{RESET} Some functions are invalid but pipeline will continue.",
+#             file=sys.stderr,
+#         )
+
+#     # process prompts
+#     for i, test_prompt in enumerate(prompts):
+
+#         print(
+#             f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
+#             file=sys.stderr,
+#         )
+
+#         result = process_prompt(
+#             model,
+#             vocab,
+#             test_prompt.prompt,
+#             functions,
+#         )
+
+#         if result and result.name:
+
+#             results.append(result.model_dump())
+
+#         else:
+
+#             results.append({
+#                 "prompt": test_prompt.prompt,
+#                 "name": "",
+#                 "parameters": {},
+#             })
+
+#     return results
