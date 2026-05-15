@@ -1,6 +1,6 @@
 [
   {
-    "name": "",
+    "name": "fn_add_numbers",
     "description": "Add two numbers together and return their sum.",
     "parameters": {
       "a": {
@@ -15,7 +15,7 @@
     }
   },
   {
-    "name": "fn_bb",
+    "name": "fn_greet",
     "description": "Generate a greeting message for a person by name.",
     "parameters": {
       "name": {
@@ -27,7 +27,7 @@
     }
   },
   {
-    "name": "",
+    "name": "fn_lala",
     "description": "Reverse a string and return the reversed result.",
     "parameters": {
       "s": {

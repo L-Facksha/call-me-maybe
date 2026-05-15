@@ -254,7 +254,7 @@ def load_vocab(model: Small_LLM_Model) -> dict[int, str]:
         tid: token
         for token, tid in vocab.items()
     }
-    print(id_to_token)
+    # print(id_to_token)
     return id_to_token
 
 
@@ -274,25 +274,46 @@ def fixed_encode(text, vocab):
     while i < len(text):
         best = None
 
-        for token, tid in vocab.items():
+        for tid, token in vocab.items():
             if text.startswith(token, i):
-                if best is None or len(token) > len(best[0]):
-                    best = (token, tid)
+                if best is None or len(token) > len(best[1]):
+                    best = (tid, token)
 
         if best is None:
             i += 1
             continue
 
-        ids.append(best[1])
-        i += len(best[0])
+        ids.append(best[0])
+        i += len(best[1])
 
     return ids
 
 
-# ids = fixed_encode("What is the sum of 246465445649 and -45683?", vocab)
+vocab = load_vocab(model)
+ids = fixed_encode("What is the sum of 246465445649 and -45683?", vocab)
 
 # # print(ids)
 
+
+def extract_logits(logits: Any) -> np.ndarray:
+    if hasattr(logits, "shape"):
+        if len(logits.shape) == 3:
+            return logits[0, -1].numpy()
+        elif len(logits.shape) == 2:
+            return logits[-1].numpy()
+        else:
+            return logits.numpy()
+    return np.array(logits)
+
+
+logits = extract_logits(model.get_logits_from_input_ids(ids))
+
+i = 0
+while i < 15:
+    print(logits[i])
+    i += 1
+
+# print(logits)
 
 # def manual_decode(ids, vocab):
 #     return "".join(vocab.get(i, "") for i in ids)
@@ -309,3 +330,26 @@ def fixed_encode(text, vocab):
 # print("Model IDs:  ", model_ids)
 # print("Manual IDs: ", manual_ids)
 # print("Match:", model_ids == manual_ids)
+
+
+# mssg = False
+#    for fn in functions:
+#         if fn.name.strip() == "":
+#             print(
+#                 f"{ORANGE}[WARNING]{RESET} No name function for: {fn.description}")
+#             mssg = True
+#     if mssg:
+#         print(f"{ORANGE}[THE PROGRAM WILL GIVE YOU RONG RESULT!!!]{RESET}")
+
+
+# i = 0
+# miss = None
+# for fn in functions:
+#     i += 1
+#     if fn.name.strip() == "":
+#         print(
+#             f"{ORANGE}[WARNING]{RESET} You messing a function name fro this prompt: {prompts[i].prompt!r}"
+#         )
+#         miss = True
+# if miss:
+#     return None

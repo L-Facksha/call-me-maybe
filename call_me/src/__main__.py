@@ -6,7 +6,7 @@ RED = "\033[91m"
 RESET = "\033[0m"
 
 
-def parse_args() -> argparse.Namespace:
+def parse_arg() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--functions_definition", type=str,
                         default="data/input/functions_definition.json")
@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     start = time.perf_counter()
-    args = parse_args()
+    args = parse_arg()
 
     try:
         from llm_sdk import Small_LLM_Model

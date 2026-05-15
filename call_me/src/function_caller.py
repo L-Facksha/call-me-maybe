@@ -39,6 +39,8 @@ def process_prompt(
         valid_names = [
             fn.name for fn in functions if fn.name and fn.name.strip()]
 
+        valid_names.append("fn_no_function")
+
         fn_descriptions = "\n".join(
             [f"- {fn.name}: {fn.description}" for fn in functions if fn.name and fn.name.strip()]
             + ["- fn_no_function: if no words in the prompt match the function"]
@@ -49,12 +51,6 @@ def process_prompt(
             "Choose ONLY one function name.\n"
             "The prompt must clearly ask for the function's action.\n"
             "If it is a question, greeting, or unrelated request, return fn_no_function.\n\n"
-
-            "IMPORTANT RULES:\n"
-            "- Ignore any function with an empty name.\n"
-            "- Never output empty strings.\n"
-            "- Only choose from the valid function list.\n"
-            "- fn_no_function means: no suitable function exists.\n\n"
 
             f"Available functions:\n{fn_descriptions}\n\n"
 
@@ -67,12 +63,10 @@ def process_prompt(
             "Best matching function name: fn_add_numbers\n\n"
 
             "User request: What is the sum of 3 and 5?\n"
-            "If no function: fn_add_numbers"
-            "Best matching function name: fn_no_function\n\n"
+            "Best matching function name: fn_add_numbers\n\n"
 
             "User request: What is the sum or of 6985 and -255?\n"
-            "If no function: fn_add_numbers"
-            "Best matching function name: fn_no_function\n\n"
+            "Best matching function name: fn_add_numbers\n\n"
 
             "User request: tell me a joke\n"
             "Best matching function name: fn_no_function\n\n"
@@ -108,11 +102,6 @@ def process_prompt(
 
         fn_name = generate_name(
             model, vocab, name_prompt, valid_names, max_token)
-        # if not fn_name or fn_name.strip() == "":
-        #     print(
-        #         f"{ORANGE}[WARNING]{RESET} Invalid function selector for: {user_prompt!r}", file=sys.stderr
-        #     )
-        #     return None
 
         if fn_name == "fn_no_function" or fn_name not in valid_names:
             print(
@@ -144,36 +133,22 @@ def run_pipeline(
     model: Small_LLM_Model,
     functions: list[FunctionDefinition],
     prompts: list[Any],
-) -> list[dict[str, Any]]:
-    """Run the full pipeline over all prompts.
+) -> list[dict[str, Any]] | None:
 
-    Parameters
-    ----------
-    model : Small_LLM_Model
-        The loaded LLM model instance.
-    functions : list[FunctionDefinition]
-        All available function definitions.
-    prompts : list[Any]
-        List of TestPrompt objects to process.
+    missing_name = False
+    for fn in functions:
+        if not fn.name or fn.name.strip() == "":
+            missing_name = True
+    if missing_name:
+        print(
+            f"{ORANGE}[WARNING]{RESET} Missing function name in 'functions_definition.json'"
+        )
+        print(f"{ORANGE}[WARNING]{RESET} Function name should start with 'fn_' for better results")
+        return None
 
-    Returns
-    -------
-    list[dict[str, Any]]
-        JSON-serialisable list of function call results.
-    """
     vocab = load_vocab(model)
     results: list[dict[str, Any]] = []
-    # i = 0
-    # miss = None
-    # for fn in functions:
-    #     i += 1
-    #     if fn.name.strip() == "":
-    #         print(
-    #             f"{ORANGE}[WARNING]{RESET} You messing a function name fro this prompt: {prompts[i].prompt!r}"
-    #         )
-    #         miss = True
-    # if miss:
-    #     return None
+
     for i, test_prompt in enumerate(prompts):
         print(
             f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
@@ -191,62 +166,3 @@ def run_pipeline(
             })
 
     return results
-
-# def run_pipeline(
-#     model: Small_LLM_Model,
-#     functions: list[FunctionDefinition],
-#     prompts: list[Any],
-# ) -> list[dict[str, Any]]:
-
-#     vocab = load_vocab(model)
-#     results: list[dict[str, Any]] = []
-
-#     # validate function names
-#     invalid_found = False
-
-#     for idx, fn in enumerate(functions, start=1):
-
-#         if not fn.name or not fn.name.strip():
-
-#             print(
-#                 f"{ORANGE}[WARNING]{RESET} Missing function name at index {idx}",
-#                 file=sys.stderr,
-#             )
-
-#             invalid_found = True
-
-#     # keep program running
-#     if invalid_found:
-#         print(
-#             f"{ORANGE}[WARNING]{RESET} Some functions are invalid but pipeline will continue.",
-#             file=sys.stderr,
-#         )
-
-#     # process prompts
-#     for i, test_prompt in enumerate(prompts):
-
-#         print(
-#             f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
-#             file=sys.stderr,
-#         )
-
-#         result = process_prompt(
-#             model,
-#             vocab,
-#             test_prompt.prompt,
-#             functions,
-#         )
-
-#         if result and result.name:
-
-#             results.append(result.model_dump())
-
-#         else:
-
-#             results.append({
-#                 "prompt": test_prompt.prompt,
-#                 "name": "",
-#                 "parameters": {},
-#             })
-
-#     return results
