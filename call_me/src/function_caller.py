@@ -1,14 +1,26 @@
 """Function calling pipeline: selects a function and extracts its arguments."""
 
 import sys
+import json
+from pathlib import Path
 from typing import Any
 from src.models import FunctionDefinition, FunctionCallResult
-from src.generator import load_vocab, generate_args, generate_name
+from src.generator import generate_args, generate_name
 from llm_sdk import Small_LLM_Model
 GREEN = "\033[92m"
 ORANGE = "\033[38;5;214m"
 RESET = "\033[0m"
 RED = "\033[91m"
+
+
+def load_vocab(model: Small_LLM_Model) -> dict[str, int]:
+    vocab_path = Path(model.get_path_to_vocab_file())
+    if not vocab_path.exists():
+        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
+    with vocab_path.open("r", encoding="utf-8") as f:
+        vocab = json.load(f)
+
+    return vocab
 
 
 def process_prompt(
@@ -143,7 +155,8 @@ def run_pipeline(
         print(
             f"{ORANGE}[WARNING]{RESET} Missing function name in 'functions_definition.json'"
         )
-        print(f"{ORANGE}[WARNING]{RESET} Function name should start with 'fn_' for better results")
+        print(
+            f"{ORANGE}[WARNING]{RESET} Function name should start with 'fn_' for better results")
         return None
 
     vocab = load_vocab(model)

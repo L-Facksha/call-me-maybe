@@ -15,16 +15,6 @@ RED = "\033[91m"
 RESET = "\033[0m"
 
 
-def load_vocab(model: Small_LLM_Model) -> dict[str, int]:
-    vocab_path = Path(model.get_path_to_vocab_file())
-    if not vocab_path.exists():
-        raise FileNotFoundError(f"Vocab file not found: {vocab_path}")
-    with vocab_path.open("r", encoding="utf-8") as f:
-        vocab = json.load(f)
-
-    return vocab
-
-
 def encode_prompt(prompt: str, vocab: dict[str, int]) -> list[int]:
     prompt = prompt.replace(" ", "Ġ")
 
@@ -153,7 +143,8 @@ def generate_number(
     )
 
     if len(target) > 9:
-        print(f"{RED}[ERROR]{RESET} max digits alowed < 10: {target}", file=sys.stderr)
+        print(
+            f"{RED}[ERROR]{RESET} max digits alowed < 10: {target}", file=sys.stderr)
         return 0.0
 
     max_token = len(target)
