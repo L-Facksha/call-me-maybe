@@ -20,13 +20,21 @@ def load_vocab(model: Small_LLM_Model) -> dict[str, int]:
     with vocab_path.open("r", encoding="utf-8") as f:
         vocab = json.load(f)
 
-    id_token = {tid: token for token, tid in vocab.items()}
-    return id_token
+    id_token = {int(tid): token for token, tid in vocab.items()}
+    token_to_id = {token: int(tid) for token, tid in vocab.items()}
+    sorted_vocab = sorted(
+        id_token.items(), key=lambda x: len(x[1]), reverse=True)
+    
+
+    return id_token, sorted_vocab, token_to_id
 
 
 def process_prompt(
     model: Small_LLM_Model,
     vocab: dict[int, str],
+    sorted_vocab: list[tuple[int, str]],
+    token_to_id: dict[str: int],
+    valid_token_ids,
     user_prompt: str,
     functions: list[FunctionDefinition],
 ) -> FunctionCallResult | None:
@@ -68,6 +76,15 @@ def process_prompt(
             f"Available functions:\n{fn_descriptions}\n\n"
 
             "Examples:\n"
+
+            "User request: Greet shrek\n"
+            "Best matching function name: fn_greet\n\n"
+
+            "User request: greet john\n"
+            "Best matching function name: fn_greet\n\n"
+
+            "User request: say hello to bob\n"
+            "Best matching function name: fn_greet\n\n"
 
             "User request: What is the square root of 16?\n"
             "Best matching function name: fn_get_square_root\n\n"
@@ -114,7 +131,7 @@ def process_prompt(
         max_token = max(len(func) for func in valid_names)
 
         fn_name = generate_name(
-            model, vocab, name_prompt, valid_names, max_token)
+            model, vocab, sorted_vocab, token_to_id, valid_token_ids, name_prompt, valid_names, max_token)
 
         if fn_name == "fn_no_function" or fn_name not in valid_names:
             print(
@@ -129,7 +146,8 @@ def process_prompt(
                 f"{ORANGE}[WARNING]{RESET} Function not found: {fn_name}", file=sys.stderr)
             return None
 
-        args = generate_args(model, vocab, user_prompt, fn_def)
+        args = generate_args(model, vocab, sorted_vocab, token_to_id,
+                             valid_token_ids, user_prompt, fn_def)
 
         return FunctionCallResult(
             prompt=user_prompt,
@@ -160,7 +178,9 @@ def run_pipeline(
             f"{ORANGE}[WARNING]{RESET} Function name should start with 'fn_' for better results")
         return None
 
-    vocab = load_vocab(model)
+    vocab, sorted_vocab, token_to_id = load_vocab(model)
+    valid_token_ids = set(vocab.keys())
+
     results: list[dict[str, Any]] = []
 
     for i, test_prompt in enumerate(prompts):
@@ -168,7 +188,8 @@ def run_pipeline(
             f"{GREEN}[INFO]{RESET} {i + 1}/{len(prompts)}: {test_prompt.prompt!r}",
             file=sys.stderr,
         )
-        result = process_prompt(model, vocab, test_prompt.prompt, functions)
+        result = process_prompt(
+            model, vocab, sorted_vocab, token_to_id, valid_token_ids, test_prompt.prompt, functions)
 
         if result and result.name:
             results.append(result.model_dump())

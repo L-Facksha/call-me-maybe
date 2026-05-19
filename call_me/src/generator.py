@@ -14,19 +14,21 @@ RED = "\033[91m"
 RESET = "\033[0m"
 
 
-def encode_prompt(prompt: str, vocab: dict[str, int]) -> list[int]:
+def encode_prompt(prompt: str, vocab: list[tuple[int, str]], token_to_id: dict[str, int]) -> list[int]:
     prompt = prompt.replace(" ", "Ġ")
 
-    sorted_vocab = sorted(vocab.items(), key=lambda x: len(x[1]), reverse=True)
     i = 0
     ids = []
     while i < len(prompt):
         best_match = None
-        for tid, token in sorted_vocab:
+        for tid, token in vocab:
             if prompt.startswith(token, i):
                 best_match = (tid, token)
                 break
         if best_match is None:
+            char = prompt[i]
+            if char in token_to_id:
+                ids.append(token_to_id[char])
             i += 1
             continue
 
@@ -47,38 +49,30 @@ def decode_prompt(ids: list[int], vocab: dict[str, int]):
     return text
 
 
-def extract_logits(logits: Any) -> np.ndarray:
-    if hasattr(logits, "shape"):
-        if len(logits.shape) == 3:
-            return logits[0, -1].numpy()
-        elif len(logits.shape) == 2:
-            return logits[-1].numpy()
-        else:
-            return logits.numpy()
-    return np.array(logits)
-
-
 def _clean(token: str) -> str:
     return token.replace("Ġ", " ").replace("▁", " ").replace("Ċ", "\n")
 
 
 def generate_name(
     model: Small_LLM_Model,
-    vocab: dict[str, int],
+    vocab: dict[int, str],
+    sorted_vocab: list[tuple[int, str]],
+    token_to_id: dict[str, int],
+    valid_token_ids,
     prompt: str,
     valid_names: list[str],
     max_token,
 ) -> str:
     current = ""
 
-    ids = encode_prompt(prompt, vocab)
+    ids = encode_prompt(prompt, sorted_vocab, token_to_id)
 
     for _ in range(max_token):
-        logits = extract_logits(model.get_logits_from_input_ids(ids))
+        logits = np.array(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
 
-            if tid not in vocab:
+            if tid not in valid_token_ids:
                 logits[tid] = -np.inf
                 continue
             clean = _clean(vocab[tid]).strip()
@@ -109,7 +103,10 @@ def generate_name(
 
 def generate_number(
     model: Small_LLM_Model,
-    vocab: dict[str, int],
+    vocab: dict[int, str],
+    sorted_vocab: list[tuple[int, str]],
+    token_to_id: dict[str, int],
+    valid_token_ids,
     prompt: str,
     user_prompt: str,
     param_index: int,
@@ -143,16 +140,16 @@ def generate_number(
 
     max_token = len(target)
 
-    ids = encode_prompt(prompt, vocab)
+    ids = encode_prompt(prompt, sorted_vocab, token_to_id)
 
     current = ""
 
     for _ in range(max_token):
-        logits = extract_logits(model.get_logits_from_input_ids(ids))
+        logits = np.array(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
 
-            if tid not in vocab:
+            if tid not in valid_token_ids:
                 logits[tid] = -np.inf
                 continue
 
@@ -182,7 +179,7 @@ def generate_number(
             break
 
     try:
-        if param_def == "digit":
+        if param_def == "integer":
             # current = round(float(current))
             return int(float(current))
         return float(current)
@@ -192,9 +189,12 @@ def generate_number(
 
 def generate_string(
     model: Small_LLM_Model,
-    vocab: dict[str, int],
+    vocab: dict[int, str],
+    sorted_vocab: list[tuple[int, str]],
+    token_to_id: dict[str, int],
+    valid_token_ids,
     prompt: str,
-    max_token: int = 10,
+    max_token: int = 40,
 ) -> str:
     """Generate a string value using constrained decoding.
 
@@ -222,14 +222,14 @@ def generate_string(
     str
         The extracted string value.
     """
-    ids = encode_prompt(prompt, vocab)
+    ids = encode_prompt(prompt, sorted_vocab, token_to_id)
     current = ""
 
     for _ in range(max_token):
-        logits = extract_logits(model.get_logits_from_input_ids(ids))
+        logits = np.array(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
-            if tid not in vocab:
+            if tid not in valid_token_ids:
                 logits[tid] = -np.inf
                 continue
 
@@ -273,6 +273,8 @@ def generate_string(
 
         if len(current) > 80:
             break
+        if current.strip() == "aeiouAEIOU":
+            current = "[aeiouAEIOU]"
 
     return current.strip().strip("'").strip('"')
 
@@ -280,6 +282,9 @@ def generate_string(
 def generate_args(
     model: Small_LLM_Model,
     vocab: dict[int, str],
+    sorted_vocab: list[tuple[int, str]],
+    token_to_id: dict[str, int],
+    valid_token_ids,
     user_prompt: str,
     func: "FunctionDefinition",
 ) -> dict[str, Any]:
@@ -290,81 +295,68 @@ def generate_args(
 
     for param_name, param_def in func.parameters.items():
 
-        if param_def.type == "number" or param_def.type == "float" or param_def.type == "digit":
+        if param_def.type in ("number", "float", "integer"):
             prompt = (
-                "Extract the numeric value from the user request.\n"
-                "Return ONLY the number.\n"
-                "No explanation. No extra text.\n\n"
-
-                "Rules:\n"
-                "- keep negative sign if present\n"
-                "- keep decimal numbers\n"
-                "- ignore all words\n"
-                "- output must be a valid number\n\n"
-
-                "Examples:\n\n"
-
-                "Request: What is 2 + 3?\n"
-                "Value: 2\n\n"
-
-                "Request: Add 10 and -7\n"
-                "Value: 10\n\n"
-
-                "Request: Add 10 and -7\n"
-                "Value: -7\n\n"
-
-                "Request: 5.5 multiplied by 2\n"
-                "Value: 5.5\n\n"
-
-                "Request: square root of 144\n"
-                "Value: 144\n\n"
+                "Extract the numeric value.\n"
+                "Return ONLY the number.\n\n"
 
                 f"Request: {user_prompt}\n"
                 f"Parameter: {param_name}\n"
                 "Value:"
             )
             parameters[param_name] = generate_number(
-                model, vocab, prompt, user_prompt, num_idx, param_def.type
+                model, vocab, sorted_vocab, token_to_id, valid_token_ids, prompt, user_prompt, num_idx, param_def.type
             )
             num_idx += 1
 
         elif param_def.type == "string":
             prompt = (
-                "Extract the parameter value from the user request.\n"
-                "Return ONLY the value, nothing else.\n\n"
+                "Extract the parameter value.\n"
+                "Return ONLY the value.\n"
+                "Take the exact value.\n\n"
+
                 "User request: Greet john\n"
                 "Parameter: name\n"
                 "Value: john\n\n"
+
                 "User request: Reverse the string 'hello'\n"
                 "Parameter: s\n"
                 "Value: hello\n\n"
+
                 "User request: Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS\n"
                 "Parameter: regex\n"
                 "Value: \\d+\n\n"
+
                 "User request: Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS\n"
                 "Parameter: replacement\n"
                 "Value: NUMBERS\n\n"
+
                 "User request: Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS\n"
                 "Parameter: source_string\n"
                 "Value: Hello 34 I'm 233 years old\n\n"
+
                 "User request: Replace all vowels in 'abc' with asterisks\n"
                 "Parameter: regex\n"
                 "Value: [aeiouAEIOU]\n\n"
+
                 "User request: Replace all vowels in 'abc' with asterisks\n"
                 "Parameter: replacement\n"
                 "Value: *\n\n"
+
                 "User request: Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat' \n"
                 "Parameter: regex\n"
                 "Value: cat\n\n"
+
                 "User request: Substitute the word 'cat' with 'dog' in 'The cat sat on the mat with another cat' \n"
                 "Parameter: replacement\n"
                 "Value: dog\n\n"
+
                 f"User request: {user_prompt}\n"
                 f"Parameter: {param_name}\n"
                 "Value:"
             )
             parameters[param_name] = generate_string(
-                model, vocab, prompt
+                model, vocab, sorted_vocab, token_to_id, valid_token_ids, prompt
             )
             str_idx += 1
 

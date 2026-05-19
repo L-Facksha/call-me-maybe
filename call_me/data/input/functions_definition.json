@@ -1,48 +1,12 @@
 [
   {
-    "name": "fn_add_numbers",
-    "description": "Add two numbers together and return their sum.",
+    "name": "fn_multiply_numbers",
+    "description": "Multiply two numbers together and return their product.",
     "parameters": {
       "a": {
-        "type": "digit"
+        "type": "number"
       },
       "b": {
-        "type": "digit"
-      }
-    },
-    "returns": {
-      "type": "digit"
-    }
-  },
-  {
-    "name": "fn_greet",
-    "description": "Generate a greeting message for a person by name.",
-    "parameters": {
-      "name": {
-        "type": "string"
-      }
-    },
-    "returns": {
-      "type": "string"
-    }
-  },
-  {
-    "name": "fn_lala",
-    "description": "Reverse a string and return the reversed result.",
-    "parameters": {
-      "s": {
-        "type": "string"
-      }
-    },
-    "returns": {
-      "type": "string"
-    }
-  },
-  {
-    "name": "fn_get_square_root",
-    "description": "Calculate the square root of a number.",
-    "parameters": {
-      "a": {
         "type": "number"
       }
     },
@@ -51,16 +15,70 @@
     }
   },
   {
-    "name": "fn_substitute_string_with_regex",
-    "description": "Replace all occurrences matching a regex pattern in a string.",
+    "name": "fn_is_even",
+    "description": "Check if an integer is even, returns True if even, False if odd.",
     "parameters": {
-      "source_string": {
+      "n": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "boolean"
+    }
+  },
+  {
+    "name": "fn_calculate_compound_interest",
+    "description": "Calculate compound interest: principal * (1 + rate)^years.",
+    "parameters": {
+      "principal": {
+        "type": "number"
+      },
+      "rate": {
+        "type": "number"
+      },
+      "years": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "number"
+    }
+  },
+  {
+    "name": "fn_execute_sql_query",
+    "description": "Execute a SQL query on a specified database.",
+    "parameters": {
+      "query": {
         "type": "string"
       },
-      "regex": {
+      "database": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_read_file",
+    "description": "Read a file from the given path with specified encoding.",
+    "parameters": {
+      "path": {
         "type": "string"
       },
-      "replacement": {
+      "encoding": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_format_template",
+    "description": "Format a template string containing placeholders.",
+    "parameters": {
+      "template": {
         "type": "string"
       }
     },
