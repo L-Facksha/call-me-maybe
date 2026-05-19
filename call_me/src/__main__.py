@@ -32,6 +32,13 @@ def main() -> int:
     try:
         functions = load_function_definitions(args.functions_definition)
         prompts = load_test_prompts(args.input)
+
+        for prompt in prompts:
+            if len(prompt.prompt) > 90:
+                print(
+                    f"{RED}[ERROR] Prompt is to long use prompt <90 charachter{RESET}: '{prompt.prompt}'")
+                return 1
+
         if not functions or not prompts:
             print(
                 f"{RED}[ERROR]{RESET} No functions or prompts loaded!", file=sys.stderr)

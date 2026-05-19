@@ -20,7 +20,8 @@ def load_vocab(model: Small_LLM_Model) -> dict[str, int]:
     with vocab_path.open("r", encoding="utf-8") as f:
         vocab = json.load(f)
 
-    return vocab
+    id_token = {tid: token for token, tid in vocab.items()}
+    return id_token
 
 
 def process_prompt(

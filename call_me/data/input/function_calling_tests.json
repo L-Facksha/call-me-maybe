@@ -1,15 +1,15 @@
 [
   {
-    "prompt": "WHAT is the sum of 3 and 5?"
+    "prompt": "WHAT is the sum of 3.6 and 5?"
   },
   {
-    "prompt": "What is the SUM of 255 and 364?"
+    "prompt": "What is the SUM of -255 and 364?"
   },
   {
-    "prompt": "tell me a jock"
+    "prompt": ""
   },
   {
-    "prompt": "Greet JOHN"
+    "prompt": "greet john"
   },
   {
     "prompt": "who are you"

@@ -1,9 +1,8 @@
 """Constrained decoding generator for function calling."""
 
-from pathlib import Path
-import json
 import re
 import sys
+import math
 import numpy as np
 from typing import Any, TYPE_CHECKING
 from llm_sdk.llm_sdk import Small_LLM_Model
@@ -18,12 +17,12 @@ RESET = "\033[0m"
 def encode_prompt(prompt: str, vocab: dict[str, int]) -> list[int]:
     prompt = prompt.replace(" ", "Ġ")
 
-    sorted_vocab = sorted(vocab.items(), key=lambda x: len(x[0]), reverse=True)
+    sorted_vocab = sorted(vocab.items(), key=lambda x: len(x[1]), reverse=True)
     i = 0
     ids = []
     while i < len(prompt):
         best_match = None
-        for token, tid in sorted_vocab:
+        for tid, token in sorted_vocab:
             if prompt.startswith(token, i):
                 best_match = (tid, token)
                 break
@@ -39,13 +38,12 @@ def encode_prompt(prompt: str, vocab: dict[str, int]) -> list[int]:
 
 
 def decode_prompt(ids: list[int], vocab: dict[str, int]):
-    reverce_vocab = {tid: token for token, tid in vocab.items()}
-
     text = ""
+
     for tid in ids:
-        if tid not in reverce_vocab:
+        if tid not in vocab:
             continue
-        text += reverce_vocab[tid]
+        text += vocab[tid]
     return text
 
 
@@ -75,20 +73,15 @@ def generate_name(
 
     ids = encode_prompt(prompt, vocab)
 
-    id_to_token = {
-        tid: token
-        for token, tid in vocab.items()
-    }
-
     for _ in range(max_token):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
 
-            if tid not in id_to_token:
+            if tid not in vocab:
                 logits[tid] = -np.inf
                 continue
-            clean = _clean(id_to_token[tid]).strip()
+            clean = _clean(vocab[tid]).strip()
             if clean == '"':
                 if current not in valid_names:
                     logits[tid] = -np.inf
@@ -101,10 +94,10 @@ def generate_name(
             break
 
         next_id = int(np.argmax(logits))
-        if next_id not in id_to_token:
+        if next_id not in vocab:
             break
 
-        clean = _clean(id_to_token[next_id]).strip()
+        clean = _clean(vocab[next_id]).strip()
         ids.append(next_id)
 
         if clean == '"':
@@ -120,6 +113,7 @@ def generate_number(
     prompt: str,
     user_prompt: str,
     param_index: int,
+    param_def: str
 ) -> float:
     """Extract a number using constrained decoding.
 
@@ -150,10 +144,6 @@ def generate_number(
     max_token = len(target)
 
     ids = encode_prompt(prompt, vocab)
-    id_to_token = {
-        tid: token
-        for token, tid in vocab.items()
-    }
 
     current = ""
 
@@ -162,11 +152,11 @@ def generate_number(
 
         for tid in range(len(logits)):
 
-            if tid not in id_to_token:
+            if tid not in vocab:
                 logits[tid] = -np.inf
                 continue
 
-            tok = _clean(id_to_token[tid]).strip()
+            tok = _clean(vocab[tid]).strip()
 
             if not tok:
                 logits[tid] = -np.inf
@@ -180,10 +170,10 @@ def generate_number(
 
         next_id = int(np.argmax(logits))
 
-        if next_id not in id_to_token:
+        if next_id not in vocab:
             break
 
-        tok = _clean(id_to_token[next_id]).strip()
+        tok = _clean(vocab[next_id]).strip()
 
         ids.append(next_id)
         current += tok
@@ -192,6 +182,9 @@ def generate_number(
             break
 
     try:
+        if param_def == "digit":
+            # current = round(float(current))
+            return int(float(current))
         return float(current)
     except (ValueError, TypeError):
         return 0.0
@@ -201,7 +194,7 @@ def generate_string(
     model: Small_LLM_Model,
     vocab: dict[str, int],
     prompt: str,
-    max_token: int = 50,
+    max_token: int = 10,
 ) -> str:
     """Generate a string value using constrained decoding.
 
@@ -230,18 +223,17 @@ def generate_string(
         The extracted string value.
     """
     ids = encode_prompt(prompt, vocab)
-    id_to_token = {tid: token for token, tid in vocab.items()}
     current = ""
 
     for _ in range(max_token):
         logits = extract_logits(model.get_logits_from_input_ids(ids))
 
         for tid in range(len(logits)):
-            if tid not in id_to_token:
+            if tid not in vocab:
                 logits[tid] = -np.inf
                 continue
 
-            token = _clean(id_to_token[tid])
+            token = _clean(vocab[tid])
 
             if not token:
                 logits[tid] = -np.inf
@@ -255,10 +247,10 @@ def generate_string(
             break
 
         next_id = int(np.argmax(logits))
-        if next_id not in id_to_token:
+        if next_id not in vocab:
             break
 
-        token = _clean(id_to_token[next_id])
+        token = _clean(vocab[next_id])
 
         if "\n" in token:
             current += token.split("\n")[0]
@@ -298,7 +290,7 @@ def generate_args(
 
     for param_name, param_def in func.parameters.items():
 
-        if param_def.type == "number":
+        if param_def.type == "number" or param_def.type == "float" or param_def.type == "digit":
             prompt = (
                 "Extract the numeric value from the user request.\n"
                 "Return ONLY the number.\n"
@@ -332,7 +324,7 @@ def generate_args(
                 "Value:"
             )
             parameters[param_name] = generate_number(
-                model, vocab, prompt, user_prompt, num_idx
+                model, vocab, prompt, user_prompt, num_idx, param_def.type
             )
             num_idx += 1
 
@@ -340,9 +332,9 @@ def generate_args(
             prompt = (
                 "Extract the parameter value from the user request.\n"
                 "Return ONLY the value, nothing else.\n\n"
-                "User request: Greet shrek\n"
+                "User request: Greet john\n"
                 "Parameter: name\n"
-                "Value: shrek\n\n"
+                "Value: john\n\n"
                 "User request: Reverse the string 'hello'\n"
                 "Parameter: s\n"
                 "Value: hello\n\n"

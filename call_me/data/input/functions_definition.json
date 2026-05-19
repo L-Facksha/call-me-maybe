@@ -4,14 +4,14 @@
     "description": "Add two numbers together and return their sum.",
     "parameters": {
       "a": {
-        "type": "number"
+        "type": "digit"
       },
       "b": {
-        "type": "number"
+        "type": "digit"
       }
     },
     "returns": {
-      "type": "number"
+      "type": "digit"
     }
   },
   {
