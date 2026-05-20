@@ -7,13 +7,39 @@ RESET = "\033[0m"
 
 
 def parse_arg() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--functions_definition", type=str,
-                        default="data/input/functions_definition.json")
-    parser.add_argument("--input", type=str,
-                        default="data/input/function_calling_tests.json")
-    parser.add_argument("--output", type=str,
-                        default="data/output/function_calling_results.json")
+    parser = argparse.ArgumentParser(
+        "Function calling system using constrained decoding.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument(
+        "--functions_definition",
+        type=str,
+        default="data/input/functions_definition.json",
+        help="Path to the function definitions JSON file.",
+    )
+
+    parser.add_argument(
+        "--input",
+        type=str,
+        default="data/input/function_calling_tests.json",
+        help="Path to the input prompts JSON file.",
+    )
+
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="data/output/function_calling_results.json",
+        help="Path to the output JSON file.",
+    )
+
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="Qwen/Qwen3-0.6B",
+        help="HuggingFace model to load.",
+    )
+
     return parser.parse_args()
 
 
@@ -36,7 +62,7 @@ def main() -> int:
         for prompt in prompts:
             if len(prompt.prompt) > 90:
                 print(
-                    f"{RED}[ERROR] Prompt is to long use prompt <90 charachter{RESET}: '{prompt.prompt}'")
+                    f"{RED}[ERROR] Prompt is to long (max <90 charachter){RESET}: '{prompt.prompt}'")
                 return 1
 
         if not functions or not prompts:
@@ -45,7 +71,7 @@ def main() -> int:
             return 1
 
         print(f"{GREEN}[INFO]{RESET} Loading model...", file=sys.stderr)
-        model = Small_LLM_Model()
+        model = Small_LLM_Model(args.model)
 
         print(f"{GREEN}[INFO]{RESET} Running pipeline...", file=sys.stderr)
         results = run_pipeline(model, functions, prompts)
@@ -54,7 +80,7 @@ def main() -> int:
         print(
             f"{GREEN}[INFO]{RESET} Results saved to {args.output}", file=sys.stderr)
         duration = time.perf_counter() - start
-        print(f"[TIME: {duration / 60:.3f}m]")
+        print(f"[TIME: {duration / 60:.3f}m]", file=sys.stderr)
         return 0
 
     except Exception as error:

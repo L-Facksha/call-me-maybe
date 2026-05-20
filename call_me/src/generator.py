@@ -67,7 +67,6 @@ def generate_name(
     ids = encode_prompt(prompt, sorted_vocab, token_to_id)
     current = ""
 
-    # --- preprocessing (ONCE) ---
     valid_token_ids = np.array(list(valid_token_ids), dtype=np.int32)
 
     clean_vocab = {
@@ -82,13 +81,9 @@ def generate_name(
 
     valid_names_set = set(valid_names)
 
-    # --- decoding loop ---
     for _ in range(max_token):
 
         logits = np.array(model.get_logits_from_input_ids(ids))
-
-        # vectorized mask (FAST)
-        masked_logits = np.full_like(logits, -np.inf, dtype=np.float32)
 
         best_id = -1
         best_score = -1e9
