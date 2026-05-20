@@ -54,7 +54,7 @@ def main() -> int:
         print(
             f"{GREEN}[INFO]{RESET} Results saved to {args.output}", file=sys.stderr)
         duration = time.perf_counter() - start
-        print(f"[TIME: {duration:.2f}s]")
+        print(f"[TIME: {duration / 60:.3f}m]")
         return 0
 
     except Exception as error:

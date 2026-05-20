@@ -56,121 +56,127 @@ def _clean(token: str) -> str:
 def generate_name(
     model: Small_LLM_Model,
     vocab: dict[int, str],
-    sorted_vocab: list[tuple[int, str]],
-    token_to_id: dict[str, int],
+    sorted_vocab,
+    token_to_id,
     valid_token_ids,
     prompt: str,
     valid_names: list[str],
-    max_token,
+    max_token: int,
 ) -> str:
-    current = ""
 
     ids = encode_prompt(prompt, sorted_vocab, token_to_id)
+    current = ""
 
+    # --- preprocessing (ONCE) ---
+    valid_token_ids = np.array(list(valid_token_ids), dtype=np.int32)
+
+    clean_vocab = {
+        tid: _clean(vocab[tid]).strip()
+        for tid in valid_token_ids
+    }
+
+    prefixes = set()
+    for name in valid_names:
+        for i in range(1, len(name) + 1):
+            prefixes.add(name[:i])
+
+    valid_names_set = set(valid_names)
+
+    # --- decoding loop ---
     for _ in range(max_token):
+
         logits = np.array(model.get_logits_from_input_ids(ids))
 
-        for tid in range(len(logits)):
+        # vectorized mask (FAST)
+        masked_logits = np.full_like(logits, -np.inf, dtype=np.float32)
 
-            if tid not in valid_token_ids:
-                logits[tid] = -np.inf
+        best_id = -1
+        best_score = -1e9
+
+        for tid in valid_token_ids:
+            tok = clean_vocab.get(int(tid), "")
+
+            if not tok:
                 continue
-            clean = _clean(vocab[tid]).strip()
-            if clean == '"':
-                if current not in valid_names:
-                    logits[tid] = -np.inf
+
+            if tok == '"':
+                if current not in valid_names_set:
+                    continue
             else:
-                maybe = current + clean
-                if not any(name.startswith(maybe) for name in valid_names):
-                    logits[tid] = -np.inf
+                if (current + tok) not in prefixes:
+                    continue
 
-        if np.all(np.isneginf(logits)):
+            score = logits[tid]
+
+            if score > best_score:
+                best_score = score
+                best_id = tid
+
+        if best_id == -1:
             break
 
-        next_id = int(np.argmax(logits))
-        if next_id not in vocab:
-            break
+        tok = clean_vocab[best_id]
+        ids.append(best_id)
 
-        clean = _clean(vocab[next_id]).strip()
-        ids.append(next_id)
+        if tok == '"':
+            return current if current in valid_names_set else ""
 
-        if clean == '"':
-            return current if current in valid_names else ""
-        current += clean
+        current += tok
 
-    return current if current in valid_names else ""
+    return current if current in valid_names_set else ""
 
 
 def generate_number(
-    model: Small_LLM_Model,
-    vocab: dict[int, str],
-    sorted_vocab: list[tuple[int, str]],
-    token_to_id: dict[str, int],
+    model,
+    vocab,
+    sorted_vocab,
+    token_to_id,
     valid_token_ids,
-    prompt: str,
-    user_prompt: str,
-    param_index: int,
-    param_def: str
-) -> float:
-    """Extract a number using constrained decoding.
+    prompt,
+    user_prompt,
+    param_index,
+    param_def,
+):
 
-    The LLM reads the prompt and generates the number token by token.
-    At each step, only tokens that keep the accumulated string a valid
-    prefix of the target number are allowed.
-    """
-
-    candidates = [
-        m.group()
-        for m in re.finditer(r"-?\d+(?:\.\d+)?", user_prompt)
-    ]
-
+    candidates = re.findall(r"-?\d+(?:\.\d+)?", user_prompt)
     if not candidates:
         return 0.0
 
-    target = (
-        candidates[param_index]
-        if param_index < len(candidates)
-        else candidates[0]
-    )
+    target = candidates[param_index] if param_index < len(
+        candidates) else candidates[0]
 
     if len(target) > 9:
-        print(
-            f"{RED}[ERROR]{RESET} max digits alowed < 10: {target}", file=sys.stderr)
+        print(f"{RED}[ERROR]{RESET} too long (<9 digits)", file=sys.stderr)
         return 0.0
 
-    max_token = len(target)
-
     ids = encode_prompt(prompt, sorted_vocab, token_to_id)
-
     current = ""
 
-    for _ in range(max_token):
+    valid_token_ids = np.array(list(valid_token_ids), dtype=np.int32)
+
+    clean_vocab = {
+        tid: _clean(vocab[tid]).strip()
+        for tid in valid_token_ids
+    }
+
+    for _ in range(len(target)):
+
         logits = np.array(model.get_logits_from_input_ids(ids))
+        masked = np.full_like(logits, -np.inf)
 
-        for tid in range(len(logits)):
-
-            if tid not in valid_token_ids:
-                logits[tid] = -np.inf
-                continue
-
-            tok = _clean(vocab[tid]).strip()
-
+        for tid in valid_token_ids:
+            tok = clean_vocab.get(int(tid), "")
             if not tok:
-                logits[tid] = -np.inf
                 continue
 
-            if not target.startswith(current + tok):
-                logits[tid] = -np.inf
+            if target.startswith(current + tok):
+                masked[tid] = logits[tid]
 
-        if np.all(np.isneginf(logits)):
+        if np.all(np.isneginf(masked)):
             break
 
-        next_id = int(np.argmax(logits))
-
-        if next_id not in vocab:
-            break
-
-        tok = _clean(vocab[next_id]).strip()
+        next_id = int(np.argmax(masked))
+        tok = clean_vocab[next_id]
 
         ids.append(next_id)
         current += tok
@@ -179,11 +185,8 @@ def generate_number(
             break
 
     try:
-        if param_def == "integer":
-            # current = round(float(current))
-            return int(float(current))
-        return float(current)
-    except (ValueError, TypeError):
+        return int(float(current)) if param_def == "integer" else float(current)
+    except:
         return 0.0
 
 
@@ -318,6 +321,10 @@ def generate_args(
                 "User request: Greet john\n"
                 "Parameter: name\n"
                 "Value: john\n\n"
+
+                "User request: Greet shrek\n"
+                "Parameter: name\n"
+                "Value: shrek\n\n"
 
                 "User request: Reverse the string 'hello'\n"
                 "Parameter: s\n"
