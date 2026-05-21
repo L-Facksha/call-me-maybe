@@ -44,7 +44,6 @@ def parse_arg() -> argparse.Namespace:
 
 
 def main() -> int:
-    start = time.perf_counter()
     args = parse_arg()
 
     try:
@@ -72,6 +71,7 @@ def main() -> int:
 
         print(f"{GREEN}[INFO]{RESET} Loading model...", file=sys.stderr)
         model = Small_LLM_Model(args.model)
+        start = time.perf_counter()
 
         print(f"{GREEN}[INFO]{RESET} Running pipeline...", file=sys.stderr)
         results = run_pipeline(model, functions, prompts)
