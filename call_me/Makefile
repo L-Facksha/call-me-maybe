@@ -1,17 +1,8 @@
-.PHONY: install run debug clean lint lint-strict help
-
-help:
-	@echo "Available targets:"
-	@echo "  install     - Install project dependencies"
-	@echo "  run         - Run the function calling system"
-	@echo "  debug       - Run in debug mode"
-	@echo "  clean       - Remove cache and temporary files"
-	@echo "  lint        - Run flake8 and mypy checks"
-	@echo "  lint-strict - Run mypy with strict mode"
-	@echo "  test        - Run pytest tests"
+.PHONY: install run debug clean lint lint-strict
 
 install:
 	uv sync
+	uv pip install -r requirements.txt
 
 run:
 	uv run python -m src
@@ -20,22 +11,15 @@ debug:
 	uv run python -m pdb -m src
 
 clean:
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name .mypy_cache -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name '*.pyc' -delete
-	find . -type d -name .venv -prune -o -type d -name venv -prune
-	rm -rf build/ dist/ *.egg-info/
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type d -name ".mypy_cache" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
 
 lint:
-	uv run flake8 src
-	uv run mypy src --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
-
-lint-strict:
-	uv run flake8 src
-	uv run mypy src --strict
-
-test:
-	uv run pytest -v
-
-.DEFAULT_GOAL := help
+	flake8 src
+	mypy src \
+		--warn-return-any \
+		--warn-unused-ignores \
+		--ignore-missing-imports \
+		--disallow-untyped-defs \
+		--check-untyped-defs

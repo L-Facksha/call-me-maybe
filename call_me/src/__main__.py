@@ -3,14 +3,25 @@ import sys
 import time
 GREEN = "\033[92m"
 RED = "\033[91m"
+ORANGE = "\033[38;5;214m"
 RESET = "\033[0m"
 
 
-def parse_arg() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        "Function calling system using constrained decoding.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the pipeline.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments with the following fields:
+
+        - ``functions_definition`` : path to the functions definition JSON
+        file.
+        - ``input`` : path to the test prompts JSON file.
+        - ``output`` : path where results will be saved.
+        - ``model`` : the model name or path to load.
+    """
+    parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--functions_definition",
@@ -44,11 +55,22 @@ def parse_arg() -> argparse.Namespace:
 
 
 def main() -> int:
-    args = parse_arg()
+    """Entry point for the function calling pipeline.
+
+    Loads function definitions and test prompts, initialises the model,
+    runs the pipeline, and saves the results.
+
+    Returns
+    -------
+    int
+        Exit code: ``0`` on success, ``1`` on any failure.
+    """
+    args = parse_args()
 
     try:
         from llm_sdk import Small_LLM_Model
-        from src.loader import load_function_definitions, load_test_prompts, save_results
+        from src.loader import load_function_definitions, load_test_prompts, \
+            save_results
         from src.function_caller import run_pipeline
     except Exception as error:
         print(f"{RED}[ERROR]{RESET} Import failed: {error}", file=sys.stderr)
@@ -56,21 +78,27 @@ def main() -> int:
 
     try:
         functions = load_function_definitions(args.functions_definition)
-        prompts = load_test_prompts(args.input)
-
-        for prompt in prompts:
-            if len(prompt.prompt) > 90:
+        for fn in functions:
+            if not fn.name or fn.name.strip() == "":
                 print(
-                    f"{RED}[ERROR] Prompt is to long (max <90 charachter){RESET}: '{prompt.prompt}'")
+                    f"{ORANGE}[WARNING]{RESET} Missing function name in \
+                    'functions_definition.json'"
+                )
+                print(
+                    f"{ORANGE}[WARNING]{RESET} Function name should start with\
+                        'fn_' for better results"
+                )
                 return 1
+        prompts = load_test_prompts(args.input)
 
         if not functions or not prompts:
             print(
-                f"{RED}[ERROR]{RESET} No functions or prompts loaded!", file=sys.stderr)
+                f"{RED}[ERROR]{RESET} No functions or prompts loaded!",
+                file=sys.stderr)
             return 1
 
         print(f"{GREEN}[INFO]{RESET} Loading model...", file=sys.stderr)
-        model = Small_LLM_Model(args.model)
+        model = Small_LLM_Model()
         start = time.perf_counter()
 
         print(f"{GREEN}[INFO]{RESET} Running pipeline...", file=sys.stderr)
@@ -78,9 +106,10 @@ def main() -> int:
 
         save_results(results, args.output)
         print(
-            f"{GREEN}[INFO]{RESET} Results saved to {args.output}", file=sys.stderr)
+            f"{GREEN}[INFO]{RESET} Results saved to {args.output}",
+            file=sys.stderr)
         duration = time.perf_counter() - start
-        print(f"[TIME: {duration / 60:.3f}m]", file=sys.stderr)
+        print(f"[TIME: {duration / 60:.2f}m]")
         return 0
 
     except Exception as error:

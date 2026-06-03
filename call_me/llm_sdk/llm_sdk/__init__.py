@@ -98,7 +98,6 @@ class Small_LLM_Model:
         logits = out.logits[0, -1].tolist()
         return [float(x) for x in logits]
 
-
     def get_path_to_vocab_file(self) -> str:
         vocab_file_name = self._tokenizer.vocab_files_names.get('vocab_file', "vocab.json")
         vocab_path = hf_hub_download(
