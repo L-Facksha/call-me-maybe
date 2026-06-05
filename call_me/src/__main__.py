@@ -98,7 +98,7 @@ def main() -> int:
             return 1
 
         print(f"{GREEN}[INFO]{RESET} Loading model...", file=sys.stderr)
-        model = Small_LLM_Model()
+        model = Small_LLM_Model(args.model)
         start = time.perf_counter()
 
         print(f"{GREEN}[INFO]{RESET} Running pipeline...", file=sys.stderr)
